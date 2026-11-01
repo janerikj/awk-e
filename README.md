@@ -69,7 +69,7 @@ calls `gawk` explicitly.
 
 ```shell
 git clone <this repo> && cd awk-e
-cp .env.example .env                      # set MQTT_HOST if you use a broker
+cp .env.example .env                    # set MQTT_HOST if you use a broker
 ./awk-e -n -r examples -i examples/messages.log  # dry run, bundled rules
 ./awk-e -l -r examples                  # what handles what
 ./awk-e -n -r examples --tick 1         # the clock alone, no broker needed
