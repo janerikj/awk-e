@@ -1,6 +1,6 @@
 # Design notes
 
-Why awk-red is built the way it is, what was tried first, and what is worth
+Why awk-e is built the way it is, what was tried first, and what is worth
 building next. The user-facing documentation is in [README.md](../README.md).
 
 ## Why AWK at all
@@ -8,7 +8,7 @@ building next. The user-facing documentation is in [README.md](../README.md).
 Node-RED is a flow engine: subscribe, filter, transform, decide, call out.
 That maps unusually well onto `pattern { action }`:
 
-| Node-RED | awk-red |
+| Node-RED | awk-e |
 | --- | --- |
 | MQTT in node | `mosquitto_sub -v` |
 | switch node | topic regex in `reg()` |
@@ -26,7 +26,7 @@ exactly what `lib/router.awk` is.
 
 AWK is good at matching, transforming and dispatching. It is poor at process
 management, argument parsing, environment files and dependency checks, so
-those live in `awk-red`:
+those live in `awk-e`:
 
 | Job | Where | Why |
 | --- | --- | --- |
@@ -64,7 +64,7 @@ not work:
   never read and the program appears to do nothing.
 * `@include "rules/*.awk"` does not glob either (tested on gawk 5.3).
 
-So `./awk-red` assembles the program itself, one `-f` per file:
+So `./awk-e` assembles the program itself, one `-f` per file:
 
 ```shell
 gawk -f lib/router.awk -f rules/door.awk -f rules/temp.awk
@@ -105,7 +105,7 @@ fn = HANDLER[i]
 ```
 
 The `@` is required by gawk for a call through a variable, which is also why
-awk-red needs gawk and not mawk.
+awk-e needs gawk and not mawk.
 
 ## MQTT topic filters
 
@@ -310,7 +310,7 @@ drops the rest. Two choices worth recording:
 Windows are measured in whole `systime()` seconds; no case has needed finer.
 Real time is also the wrong clock for the tests: expiry would
 mean sleeping, and a burst straddles a second boundary now and then. So the
-engine clock has a seam - `AWKRED_TEST_STEP`, which starts at the real time
+engine clock has a seam - `AWKE_TEST_STEP`, which starts at the real time
 and advances every check by that many seconds. Step 0 (or unset) means a burst
 yields exactly one survivor, step equal to the window means every message
 crosses it, and neither can flake. Like `MOSQ_SUB` it is a tool path rather
@@ -349,7 +349,7 @@ It was dropped after looking at the fifo's two jobs:
 
 * **The fifo is where EOF lives.** The engine sees end of input when the writer
   closes the fifo, and that is how a dead subscription ends the run. An engine
-  holding a write end open on its own input never sees EOF, so `awk-red`'s
+  holding a write end open on its own input never sees EOF, so `awk-e`'s
   `wait` on the engine would hang. Open and close per message would work, but it
   puts the shutdown path at the mercy of a race.
 * **Replay has no fifo.** `--input` runs gawk directly on the file, which is
@@ -374,7 +374,7 @@ recording:
 * **A hop guard, because the broker was the rate limit.** A `pub()` feedback
   loop is slowed by the broker round-trip; an in-process cycle has no such
   brake and would spin at full CPU. The guard counts hops per event against
-  `AWKRED_CHAIN_MAX` (default 32) and drops with a warning, the same fail-loud
+  `AWKE_CHAIN_MAX` (default 32) and drops with a warning, the same fail-loud
   shape as a bad `limit()` window.
 * **No new side effect to dry-run.** `chain()` prints nothing under
   `--dry-run` because it runs no command; the eventual `pub()`/`emit()` at the
@@ -383,11 +383,11 @@ recording:
 
 ## Buffering between stages
 
-This is the single most common way an awk-red-like setup appears broken. The
+This is the single most common way an awk-e-like setup appears broken. The
 cause, the fix and the two-command diagnosis are in README under *Buffering
 between stages*; what shaped the code is the rest.
 
-awk-red uses `stdbuf -oL` on **both** stages:
+awk-e uses `stdbuf -oL` on **both** stages:
 
 ```shell
 stdbuf -oL mosquitto_sub -v -t '#' &
@@ -395,7 +395,7 @@ stdbuf -oL gawk -f lib/router.awk -f rules/*.awk < "$fifo" &
 ```
 
 `stdbuf` works because both programs use libc stdio. Programs that buffer
-themselves need their own flag instead - `jq --unbuffered`, which awk-red
+themselves need their own flag instead - `jq --unbuffered`, which awk-e
 passes.
 
 Worth knowing while testing this: gawk flushes its output before it reads a
@@ -406,7 +406,7 @@ program that prints and then blocks somewhere that is not an input read, which
 is what `test/fake-mosquitto-sub` does.
 
 `mawk -W interactive` was the other option, and it works, but mawk cannot run
-awk-red anyway.
+awk-e anyway.
 
 ## A fifo instead of a pipeline
 
@@ -416,7 +416,7 @@ sitting on the broker connection until the next message arrives - it never
 gets EPIPE because nobody writes to it. Over weeks that is a quietly leaked
 connection and a surprise on the next start.
 
-Connecting the stages through a fifo makes the writers reachable. awk-red goes
+Connecting the stages through a fifo makes the writers reachable. awk-e goes
 one step further and puts everything that writes to the fifo into one writer
 process:
 
@@ -450,14 +450,14 @@ answer) and its status is reported under its own name - `http listener exited
 with status 137`, `clock exited with status N`. The signal-only lifetime that
 follows from that is described under *Inputs are opt-in* below.
 
-awk-red then waits for the engine and reports its status, falling back to the
+awk-e then waits for the engine and reports its status, falling back to the
 writer's status only when the engine had nothing to fail about. Either process
 exiting leads to a deterministic shutdown, and the fifo is removed on every
 exit path.
 
 ### Polling was the first answer, and it was wrong
 
-The first version kept all three pids in awk-red and polled them every half
+The first version kept all three pids in awk-e and polled them every half
 second until one of them stopped. Three bugs came out of that, and all three
 were shell bugs:
 
@@ -481,7 +481,7 @@ the run in roughly 30 ms.
 
 `--webhook` puts another writer in `write_loop`. It had to live there: with
 `--mqtt`, the run ends with the subscription, and if the listener kept the fifo
-open after that, the engine would never see end of input and awk-red would hang
+open after that, the engine would never see end of input and awk-e would hang
 on its final `wait`. So `http_loop` is started only when webhooks are on and is
 added to the `TERM`/`INT` trap alongside the other children.
 
@@ -627,7 +627,7 @@ only add flakiness.
 
 Four traps the tests had to avoid, each of which cost time:
 
-* **Background jobs ignore `SIGINT`.** A Ctrl-C case that runs awk-red with `&`
+* **Background jobs ignore `SIGINT`.** A Ctrl-C case that runs awk-e with `&`
   and then sends `SIGINT` passes for the wrong reason: the signal was inherited
   as `SIG_IGN`. The Ctrl-C case uses `timeout` in the foreground instead.
 * **A name is not a pid.** Leftovers matched with `pgrep -f mosquitto` or
@@ -638,13 +638,13 @@ Four traps the tests had to avoid, each of which cost time:
   buffering case sent `message 1` to a temperature rule, which correctly did
   nothing, and the case reported "no output" - indistinguishable from the
   buffering bug it was written to catch. The fake now takes an explicit payload,
-  and the case inspects the output while awk-red is still running, so a
+  and the case inspects the output while awk-e is still running, so a
   block-buffered engine cannot pass by being flushed at exit.
 * **A developer's `.env` reaches every case.** Since inputs are opt-in, an
-  `AWKRED_MQTT=1` (or `--mqtt` baked into a shell alias) in the environment
+  `AWKE_MQTT=1` (or `--mqtt` baked into a shell alias) in the environment
   would quietly subscribe in cases that exist to prove no subscription happens.
-  The suite pins `AWKRED_MQTT=0`, `AWKRED_TICK=0`, `AWKRED_HTTP_PORT=0` and
-  `AWKRED_TEST_STEP=0` before running anything, so each case names its own
+  The suite pins `AWKE_MQTT=0`, `AWKE_TICK=0`, `AWKE_HTTP_PORT=0` and
+  `AWKE_TEST_STEP=0` before running anything, so each case names its own
   inputs, and its own clock, and only its own.
 
 The suite is worth what its failures are worth, so each guarantee was checked by
@@ -690,10 +690,10 @@ arrived three seconds late after one three-second handler), and `sleep()` is not
 even available in a stock build. AWK has no timers and no concurrency, so
 nothing inside the router can fire while input is idle.
 
-The clock therefore lives in `awk-red`, as another writer on the fifo:
+The clock therefore lives in `awk-e`, as another writer on the fifo:
 
 ```
-awk-red/tick/2026-10-03T11:22:33Z 1756899753
+awk-e/tick/2026-10-03T11:22:33Z 1756899753
 ```
 
 Shell, `date`, one `printf`. The engine needs no change at all: it is a message
@@ -718,8 +718,8 @@ Two costs, both accepted deliberately:
   the survivors without reading `/proc` or timing anything.
 * **Feedback.** With `-t '#'` the router receives its own published messages,
   so a rule that publishes to the topic it matches re-triggers itself. The
-  write-once contract this forces on `awk-red/tick/` is stated in README under
-  *Scheduled work*; heartbeat output goes to `awk-red/heartbeat/`, as
+  write-once contract this forces on `awk-e/tick/` is stated in README under
+  *Scheduled work*; heartbeat output goes to `awk-e/heartbeat/`, as
   `examples/heartbeat.awk` shows.
 
 Exit status follows from the same split: a source that failed on its own is
@@ -734,15 +734,15 @@ a surprise in a router that is otherwise purely reactive.
 ## One heartbeat, not two
 
 A cron-driven heartbeat was the original plan and is deliberately not what
-awk-red ships. A heartbeat consumed by the router cannot report that the router
+awk-e ships. A heartbeat consumed by the router cannot report that the router
 died - the check and the thing being checked are the same process - so for
 scheduled automations cron adds nothing that the internal clock does not already
 do, and it actively misleads: it keeps publishing every five minutes while
-awk-red is down, so an external watcher sees a healthy pulse on a dead router.
+awk-e is down, so an external watcher sees a healthy pulse on a dead router.
 
 Cron, or better a systemd timer, earns its place only for a different job:
-telling something *outside* awk-red that the router is gone. That wants its own
-topic, published by a unit that does not depend on awk-red, so the two signals
+telling something *outside* awk-e that the router is gone. That wants its own
+topic, published by a unit that does not depend on awk-e, so the two signals
 cannot be confused. It is not built, because nothing outside needs it yet.
 
 Note that the `%` in a crontab line is a newline to cron, which is an argument
@@ -759,9 +759,9 @@ broker-free mode, but only for a recording.
 Inputs are now a set, each one asked for separately:
 
 ```
---mqtt        AWKRED_MQTT       the broker subscription
---http-port   AWKRED_HTTP_PORT  HTTP webhooks
---tick        AWKRED_TICK       the clock
+--mqtt        AWKE_MQTT       the broker subscription
+--http-port   AWKE_HTTP_PORT  HTTP webhooks
+--tick        AWKE_TICK       the clock
 -i FILE                       a recording (exclusive with the rest)
 ```
 
@@ -776,8 +776,8 @@ off. The alternatives were weighed before building:
 
 | Option | Effect |
 | --- | --- |
-| `--no-mqtt` / `AWKRED_MQTT=0`, MQTT on by default | Non-breaking, but keeps the surprise: a bare `./awk-red` is a live subscription. |
-| `--mqtt` / `AWKRED_MQTT=1`, defaulting off (chosen) | "Turn MQTT on explicitly"; flips the default, which is fine while v0 has no users to migrate. |
+| `--no-mqtt` / `AWKE_MQTT=0`, MQTT on by default | Non-breaking, but keeps the surprise: a bare `./awk-e` is a live subscription. |
+| `--mqtt` / `AWKE_MQTT=1`, defaulting off (chosen) | "Turn MQTT on explicitly"; flips the default, which is fine while v0 has no users to migrate. |
 | `--input`-style selector over `mqtt`, `http`, `tick` | Clearest mental model, at the cost of the largest surface - and sources combine (`--mqtt --tick`) anyway, so it would be a set of booleans with more syntax. |
 
 What actually had to change was the lifetime model, not the flags:
@@ -854,7 +854,7 @@ Roughly by fit and effort:
 Deliberately not built into the core:
 
 * **RSS/Atom, IMAP, weather and other HTTP APIs.** These are pull, not push:
-  they have to poll, they need "what is new" state that awk-red does not persist
+  they have to poll, they need "what is new" state that awk-e does not persist
   yet, and XML or IMAP parsing drags in a dependency that is easy to get wrong
   on real-world feeds (namespaces, CDATA, entities, encodings). They are
   `--pipe` recipes, or better, external producers that publish to MQTT or to the
@@ -918,12 +918,12 @@ Roughly in order of value per effort:
   so a restart does not re-alarm on stale values.
 * **A test runner**: replay a directory of recordings and diff against
   expected output, which turns `--input` into real regression tests.
-* **A control topic** (`awk-red/cmd/#`): reload rules, report status or reset
+* **A control topic** (`awk-e/cmd/#`): reload rules, report status or reset
   state without restarting the service.
 * **Repeated rule directories**, so a shared library of rules can be combined
   with a local set; ordering already makes this well defined.
 * **Observability**: per-topic counters and status reporting on
-  `awk-red/status`.
+  `awk-e/status`.
 * **A faster publish path.** `pub()` spawns one `mosquitto_pub` per message, so
   every publish is a process plus a fresh TCP and MQTT session. Benchmarks
   (`bench/`) put it at 11-13 ms per message - about 80/s - against the engine's
@@ -934,8 +934,8 @@ Roughly in order of value per effort:
   handling `json()` already shows the shape of. Worth it only when a rule
   publishes on most messages, since the connection is now held open.
 * **External liveness**, if an outside system ever needs it: a systemd timer
-  unit publishing on a topic of its own, `awk-red/external/heartbeat`, which
-  never depends on awk-red being alive. Deliberately not a cron entry - cron
+  unit publishing on a topic of its own, `awk-e/external/heartbeat`, which
+  never depends on awk-e being alive. Deliberately not a cron entry - cron
   treats `%` as a newline, and the escaping that requires is exactly the
   fragility a timer unit avoids.
 
@@ -947,7 +947,7 @@ calls and two-way coprocesses; the script needs bash >= 4.4 for `mapfile -d`.
 ## Pub broker configuration (built in v0.7.0)
 
 Rules call `pub()` and `pub_retained()` to publish to an MQTT broker. The
-publish broker is configured separately so awk-red can act as a bridge or
+publish broker is configured separately so awk-e can act as a bridge or
 gateway without needing the input broker to be the same:
 
 - `MQTT_PUB_HOST` - publish broker host (default: `MQTT_HOST`)
@@ -965,10 +965,10 @@ value, so existing setups keep working unchanged. The subscription side
 ## Gateway mode (built in v0.7.0)
 
 Gateway mode forwards input messages to the publish broker when no rule
-handles them. This lets awk-red act as a transparent bridge/gateway without
+handles them. This lets awk-e act as a transparent bridge/gateway without
 writing any rules:
 
-- `--gateway` or `AWKRED_GATEWAY=1` enables gateway mode.
+- `--gateway` or `AWKE_GATEWAY=1` enables gateway mode.
 - `--gateway` is not allowed with `--mqtt` unless a separate publish broker is
   configured (`MQTT_PUB_HOST`/`MQTT_PUB_PORT` or their TLS/user/pass variants
   differ from the subscription broker). In that case the MQTT input can run

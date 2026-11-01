@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# bench - compare awk-red's capacity with a raw MQTT round trip.
+# bench - compare awk-e's capacity with a raw MQTT round trip.
 #
 # Four stages handle the exact same N messages, each measured as the wall-clock
 # span from the first to the last message of the run, at the point that stage
@@ -8,11 +8,11 @@
 #
 #   broker      mosquitto_pub -l -> broker -> mosquitto_sub -C N
 #   subscriber  mosquitto_pub -l -> broker -> mosquitto_sub -> fifo -> engine
-#   engine      awk-red -i (no broker), pure pipeline
-#   publisher   awk-red -i, a rule pub()ing each message -> broker -> monitor
+#   engine      awk-e -i (no broker), pure pipeline
+#   publisher   awk-e -i, a rule pub()ing each message -> broker -> monitor
 #
 # The broker is on another host by design; latency is part of the number. The
-# two mosquitto tools stamp arrivals with %U (epoch, nanoseconds); the awk-red
+# two mosquitto tools stamp arrivals with %U (epoch, nanoseconds); the awk-e
 # stages cannot clock themselves (gawk's systime() is whole seconds), so the
 # benchmark rule shells out `date +%s.%N` on message #1 and #N only.
 #
@@ -20,13 +20,13 @@
 #                     [-n "N N"] [-r REPEATS] [-q QOS] [--nodelay] [--sleep S]
 #
 # defaults: host mqtt.example.invalid, port 1883, N "100 1000", 5 repeats, QoS 0.
-# Precedence is the same as awk-red's: command line > environment > .env >
+# Precedence is the same as awk-e's: command line > environment > .env >
 # default, and any MQTT_* exported here wins over .env.
 set -euo pipefail
 
 SELF_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd -- "$SELF_DIR/.." && pwd)
-AWKRED="$ROOT/awk-red"
+AWKE="$ROOT/awk-e"
 RULES_SUB="$SELF_DIR/rules/sub"
 RULES_PUB="$SELF_DIR/rules/pub"
 TMP="$SELF_DIR/tmp"
@@ -72,9 +72,9 @@ need mosquitto_sub
 need gawk
 need stdbuf
 need date
-[[ -x $AWKRED ]] || { printf 'bench: %s not executable\n' "$AWKRED" >&2; exit 1; }
+[[ -x $AWKE ]] || { printf 'bench: %s not executable\n' "$AWKE" >&2; exit 1; }
 
-# The environment wins over .env, the way awk-red resolves it. Capture what was
+# The environment wins over .env, the way awk-e resolves it. Capture what was
 # exported, source .env, then put the exported values back.
 ENV_HOST=${MQTT_HOST:-} ENV_PORT=${MQTT_PORT:-} ENV_USER=${MQTT_USER:-} ENV_PASS=${MQTT_PASS:-}
 if [[ -z ${BENCH_NO_ENV:-} && -r $ROOT/.env ]]; then
@@ -96,21 +96,21 @@ QOS=${OPT_QOS:-0}
 NODELAY=${OPT_NODELAY:-0}
 READY_SLEEP=${OPT_SLEEP:-0.8}
 
-# awk-red takes the broker from the environment (and -h/-p); the credentials
+# awk-e takes the broker from the environment (and -h/-p); the credentials
 # only ever come from MQTT_USER/MQTT_PASS. Export everything so a rule calling
 # pub() reaches the same broker as the tools below.
 export MQTT_HOST=$HOST MQTT_PORT=$PORT
 [[ -n $USER ]] && export MQTT_USER=$USER
 [[ -n $PASS ]] && export MQTT_PASS=$PASS
 # Neutralise a developer's .env inputs: the bench names its own.
-export AWKRED_MQTT=0 AWKRED_TICK=0 AWKRED_WEBHOOK=0 AWKRED_TEST_STEP=0
+export AWKE_MQTT=0 AWKE_TICK=0 AWKE_WEBHOOK=0 AWKE_TEST_STEP=0
 
 MOSQ=(-h "$HOST" -p "$PORT")
 [[ -n $USER ]] && MOSQ+=(-u "$USER")
 [[ -n $PASS ]] && MOSQ+=(-P "$PASS")
 [[ $QOS -gt 0 ]] && MOSQ+=(-q "$QOS")
 [[ $NODELAY == 1 ]] && MOSQ+=(--nodelay)
-# -e /dev/null: ignore ./.env in awk-red, the bench has already resolved it.
+# -e /dev/null: ignore ./.env in awk-e, the bench has already resolved it.
 AWKFLAGS=(-q -e /dev/null -h "$HOST" -p "$PORT")
 
 # ------------------------------------------------------------- helpers
@@ -139,7 +139,7 @@ wait_pid() { # pid, whole seconds; return 1 and TERM it if it overruns
 }
 
 # Each stage prints "<span> <wall>": the first-to-last span at its own clock,
-# and the wall time of the sending side (publish burst / awk-red process).
+# and the wall time of the sending side (publish burst / awk-e process).
 # A fixed sleep establishes the subscription: mosquitto_sub's debug (-d) shares
 # stdout with the payload, so it cannot be used as a readiness handshake here.
 bench_broker() {
@@ -159,7 +159,7 @@ bench_subscriber() {
     local marker=$TMP/b.mark
     rm -f "$marker".first "$marker".last
     BENCH_IN="$IN" BENCH_N="$N" BENCH_MARKER="$marker" \
-        "$AWKRED" --mqtt "${AWKFLAGS[@]}" -t "$IN" -r "$RULES_SUB" &
+        "$AWKE" --mqtt "${AWKFLAGS[@]}" -t "$IN" -r "$RULES_SUB" &
     local ap=$! t0 t1
     sleep "$READY_SLEEP"
     t0=$(now)
@@ -175,7 +175,7 @@ bench_engine() {
     local t0 t1
     t0=$(now)
     BENCH_IN="$IN" BENCH_N="$N" BENCH_MARKER="$marker" \
-        "$AWKRED" -i "$RECORDING" -r "$RULES_SUB" -q
+        "$AWKE" -i "$RECORDING" -r "$RULES_SUB" -q
     t1=$(now)
     printf '%s %s\n' "$(marker_span "$marker")" "$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.6f", b-a}')"
 }
@@ -188,7 +188,7 @@ bench_publisher() {
     sleep "$READY_SLEEP"
     t0=$(now)
     BENCH_IN="$IN" BENCH_OUT="$OUT" \
-        "$AWKRED" -i "$RECORDING" -r "$RULES_PUB" -q
+        "$AWKE" -i "$RECORDING" -r "$RULES_PUB" -q
     t1=$(now)
     wait_pid "$sp" 30 || true
     printf '%s %s\n' "$(span_file "$times")" "$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.6f", b-a}')"
@@ -217,7 +217,7 @@ rates() { # N, span_seconds -> "ms/msg msg/s"
 
 # ---------------------------------------------------------------- run
 RUNID=$(date +%s)-$$
-BASE="awk-red-bench/$RUNID"
+BASE="awk-e-bench/$RUNID"
 IN="$BASE/in"
 OUT="$BASE/out"
 
@@ -237,7 +237,7 @@ for N in $N_LIST; do
     for stage in broker subscriber engine publisher; do : > "$TMP/$stage.$N"; done
 
     # One discarded warm-up per stage: fills caches, connects the broker, and
-    # keeps the awk-red gawk compile out of the measured runs.
+    # keeps the awk-e gawk compile out of the measured runs.
     bench_broker      >/dev/null 2>>"$TMP/warn.$N" || true
     bench_subscriber  >/dev/null 2>>"$TMP/warn.$N" || true
     bench_engine      >/dev/null 2>>"$TMP/warn.$N" || true

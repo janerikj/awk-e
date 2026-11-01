@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # test/fake-mosquitto-sub - a stand-in for mosquitto_sub.
 #
-# awk-red talks to a fake subscriber rather than to a real broker so that the
+# awk-e talks to a fake subscriber rather than to a real broker so that the
 # failure paths can be produced on demand: a subscription that is refused, one
 # that dies, one that delivers nothing. None of the bugs that shaped the
 # supervision code were MQTT bugs, so there is nothing to gain from a real broker
 # here.
 #
-# The mode comes from the environment, not from argv: awk-red passes real
+# The mode comes from the environment, not from argv: awk-e passes real
 # mosquitto_sub options, and a path with arguments in it is not a command that
 # stdbuf can run.
 #
@@ -18,7 +18,7 @@
 #                                  apart, then silence
 #   FAKE_SUB_MODE=buffered         the same messages, printed by a gawk that
 #                                  blocks on a fifo instead of exiting, so each
-#                                  line only leaves the process because awk-red
+#                                  line only leaves the process because awk-e
 #                                  wraps the subscriber in stdbuf -oL
 #
 #   FAKE_SUB_COUNT    default 3
@@ -80,7 +80,7 @@ buffered)
     # so a program that prints and then blocks on *input* looks line buffered
     # whether it is or not. Blocking on a getline from a fifo that nobody writes
     # to is what actually exposes block buffering - the line only leaves the
-    # process because awk-red wrapped it in stdbuf -oL.
+    # process because awk-e wrapped it in stdbuf -oL.
     #
     # Without stdbuf the reader sees nothing at all until this process exits.
     gate="${TMPDIR:-/tmp}/fake-sub-gate.$$"

@@ -1,17 +1,17 @@
 # Examples
 
-This directory is not loaded by default. Point awk-red at it with
+This directory is not loaded by default. Point awk-e at it with
 `-r examples` (there is deliberately no default rule directory, so a live input
 cannot trigger an example rule by accident). The rules here double as a
 starting point for your own.
 
 ```shell
-./awk-red -l -r examples                 # what is in here
-./awk-red -n -r examples -i messages.log # dry run against the recording
-./awk-red -v -r examples -i messages.log # the same, with routing logged
-./awk-red -r examples --tick 2                 # the clock alone
-./awk-red -n -r examples --mqtt -h mqtt.local  # live, dry run against a broker
-./awk-red -r examples --mqtt -h mqtt.local --tick 2   # live, with a clock
+./awk-e -l -r examples                 # what is in here
+./awk-e -n -r examples -i messages.log # dry run against the recording
+./awk-e -v -r examples -i messages.log # the same, with routing logged
+./awk-e -r examples --tick 2                 # the clock alone
+./awk-e -n -r examples --mqtt -h mqtt.local  # live, dry run against a broker
+./awk-e -r examples --mqtt -h mqtt.local --tick 2   # live, with a clock
 ```
 
 | File | Shows |
@@ -39,13 +39,13 @@ and hand the door state to `logger`.
 
 ## `heartbeat.awk`
 
-Runs on the clock from `--tick` / `AWKRED_TICK` instead of on broker traffic,
+Runs on the clock from `--tick` / `AWKE_TICK` instead of on broker traffic,
 which is the only way to get periodic work out of a router that also has to stay
 quiet while nothing happens. The rule can be tested offline, because a tick is
 just a line in a recording:
 
 ```shell
-echo 'awk-red/tick/2026-10-03T11:22:33Z 1756899753' | ./awk-red -n -q -i -
+echo 'awk-e/tick/2026-10-03T11:22:33Z 1756899753' | ./awk-e -n -q -i -
 ```
 
 ## `modbus.sh`
@@ -56,10 +56,10 @@ Different register types need different reads, so the map's `type` column picks
 the Modbus function code.
 
 ```shell
-awk-red --pipe './examples/modbus.sh 10.0.0.5' --every 5 --changed
+awk-e --pipe './examples/modbus.sh 10.0.0.5' --every 5 --changed
 ```
 
-It needs `mbpoll` (not an awk-red dependency): `sudo apt install mbpoll`.
+It needs `mbpoll` (not an awk-e dependency): `sudo apt install mbpoll`.
 `MODBUS_HOST`, `MODBUS_PORT` (default 502) and `MODBUS_MAP` set the defaults.
 `./examples/modbus.sh --help` (or `-?`) explains the map columns and options.
 
@@ -70,13 +70,13 @@ your own with:
 
 ```shell
 mosquitto_sub -v -t '#' | tee my.log
-./awk-red -n -i my.log
+./awk-e -n -i my.log
 ```
 
-## `awk-red.service`
+## `awk-e.service`
 
-A systemd unit. It assumes the script in `/usr/local/bin/awk-red`, rules in
-`/etc/awk-red/rules` and configuration in `/etc/awk-red/.env`. See the
+A systemd unit. It assumes the script in `/usr/local/bin/awk-e`, rules in
+`/etc/awk-e/rules` and configuration in `/etc/awk-e/.env`. See the
 deployment section in [../README.md](../README.md).
 
 ## Your own rules
@@ -86,5 +86,5 @@ Copy the directory, delete what you do not need and keep what you do:
 ```shell
 cp -r examples ~/rules && rm ~/rules/json.awk
 $EDITOR ~/rules/door.awk
-./awk-red -r ~/rules -n -i ~/rules/recording.log
+./awk-e -r ~/rules -n -i ~/rules/recording.log
 ```

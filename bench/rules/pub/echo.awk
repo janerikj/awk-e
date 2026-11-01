@@ -2,8 +2,8 @@
 # way a real rule would. One mosquitto_pub process and one broker connection per
 # message, which is exactly the cost this stage is meant to expose.
 BEGIN {
-    IN  = getenv("BENCH_IN", "awk-red-bench/in")
-    OUT = getenv("BENCH_OUT", "awk-red-bench/out")
+    IN  = getenv("BENCH_IN", "awk-e-bench/in")
+    OUT = getenv("BENCH_OUT", "awk-e-bench/out")
     reg(IN, "bench_echo", "benchmark publisher")
 }
 

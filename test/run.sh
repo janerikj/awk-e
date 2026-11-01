@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# test/run.sh - regression tests for awk-red.
+# test/run.sh - regression tests for awk-e.
 #
 #   ./test/run.sh            run everything
 #   ./test/run.sh deny       run only the cases whose name matches "deny"
 #
-# No test framework and no dependencies beyond bash, coreutils and awk-red
+# No test framework and no dependencies beyond bash, coreutils and awk-e
 # itself: the subscriber is replaced by test/fake-mosquitto-sub, so a refusal, a
 # crash or a silent broker can be produced on demand. Every case here exists
 # because something once went wrong - the supervision cases are regression tests
@@ -24,11 +24,11 @@ cd "$(dirname "$0")/.." || exit 1
 export MOSQ_SUB="$PWD/test/fake-mosquitto-sub"
 # Inputs are opt-in and each case names the ones it wants: a developer's .env
 # must not switch one on (or off) behind the suite's back.
-export AWKRED_MQTT=0 AWKRED_TICK=0 AWKRED_HTTP_PORT=3737 AWKRED_WEBHOOK=0
+export AWKE_MQTT=0 AWKE_TICK=0 AWKE_HTTP_PORT=3737 AWKE_WEBHOOK=0
 # The rate-limit test seam, pinned like the inputs: a value in a developer's
 # .env must not move a window behind the suite's back.
-export AWKRED_TEST_STEP=0
-AWKRED="$PWD/awk-red"
+export AWKE_TEST_STEP=0
+AWKE="$PWD/awk-e"
 FILTER=${1:-${FILTER:-}}   # ./test/run.sh [case-substring]
 CASE=""
 
@@ -79,30 +79,30 @@ assert_no_strays() {
         CASE_FAILED=1
         return 1
     fi
-    if compgen -G "$TMPDIR/awk-red.??????" >/dev/null 2>&1; then
-        printf '        leftover fifo: %s\n' "$TMPDIR"/awk-red.* >&2
+    if compgen -G "$TMPDIR/awk-e.??????" >/dev/null 2>&1; then
+        printf '        leftover fifo: %s\n' "$TMPDIR"/awk-e.* >&2
         CASE_FAILED=1
         return 1
     fi
     return 0
 }
 
-# Start awk-red in the background, keeping the pid so a case can signal it
+# Start awk-e in the background, keeping the pid so a case can signal it
 # directly instead of hunting for it.
 RUN_PID=""
-start_awkred() {
-    "$AWKRED" "$@" >"$OUT" 2>"$ERR" &
+start_awke() {
+    "$AWKE" "$@" >"$OUT" 2>"$ERR" &
     RUN_PID=$!
     strays+=("$RUN_PID")
 }
 
-signal_awkred() {
+signal_awke() {
     kill -"$1" "$RUN_PID" 2>/dev/null || true
 }
 
 # Signal it, then wait for it and hand back the exit status.
-finish_awkred() {
-    signal_awkred "${1:-TERM}"
+finish_awke() {
+    signal_awke "${1:-TERM}"
     local i
     for (( i = 0; i < 40; i++ )); do
         kill -0 "$RUN_PID" 2>/dev/null || break
@@ -114,7 +114,7 @@ finish_awkred() {
 # Wait for a run that should end on its own - a failed source closes the fifo
 # and the engine exits - and hand back the exit status. If it does not end, it
 # is a hang: report it, kill it, and let the case still check its output.
-wait_awkred() {
+wait_awke() {
     local i
     for (( i = 0; i < 50; i++ )); do
         kill -0 "$RUN_PID" 2>/dev/null || break
@@ -211,7 +211,7 @@ http_raw() {
 case_replay_golden() {
     CASE="replay against a recording matches the golden output"
     local rc
-    "$AWKRED" -n -q -r examples -i examples/messages.log >"$OUT" 2>"$ERR"
+    "$AWKE" -n -q -r examples -i examples/messages.log >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     diff -u test/expected/messages.log.out "$OUT" >"$ERR" || bad "$(cat "$ERR")"
@@ -222,11 +222,11 @@ case_replay_golden() {
 case_tick_offline() {
     CASE="a tick line in a recording routes to the heartbeat rule"
     local rc
-    echo 'awk-red/tick/2026-10-03T11:22:33Z 1756899753' \
-        | "$AWKRED" -n -q -r examples -i - >"$OUT" 2>"$ERR"
+    echo 'awk-e/tick/2026-10-03T11:22:33Z 1756899753' \
+        | "$AWKE" -n -q -r examples -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
-    grep -qF -- "-t 'awk-red/heartbeat/2026-10-03T11:22:33Z' -m '1756899753'" "$OUT" \
+    grep -qF -- "-t 'awk-e/heartbeat/2026-10-03T11:22:33Z' -m '1756899753'" "$OUT" \
         || bad "no heartbeat published, got: $(cat "$OUT")"
     pass "$CASE"
 }
@@ -234,24 +234,24 @@ case_tick_offline() {
 case_tick_off_by_default() {
     CASE="the clock is off unless asked for"
     local banner
-    banner=$("$AWKRED" -n -r examples -i examples/messages.log 2>&1 >/dev/null)
+    banner=$("$AWKE" -n -r examples -i examples/messages.log 2>&1 >/dev/null)
     [[ $banner != *"clock"* ]] || bad "the banner mentions a clock without --tick"
-    grep -qF '^awk-red/tick/' "$OUT" 2>/dev/null && bad "ticks appeared without --tick"
+    grep -qF '^awk-e/tick/' "$OUT" 2>/dev/null && bad "ticks appeared without --tick"
     pass "$CASE"
 }
 
 case_tick_on_silent_broker() {
     CASE="ticks arrive while the broker sends nothing"
     local rc
-    start_awkred -n -v -r examples --tick 1 --mqtt -h test.invalid
+    start_awke -n -v -r examples --tick 1 --mqtt -h test.invalid
     sleep 3.2
-    finish_awkred TERM
+    finish_awke TERM
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     local ticks
     ticks=$(grep -c '^DRYRUN> ' "$OUT")
     (( ticks >= 2 )) || bad "only $ticks ticks in 3 s"
-    grep -qF 'route awk-red/tick/' "$ERR" || bad "the engine did not route the tick as a message"
+    grep -qF 'route awk-e/tick/' "$ERR" || bad "the engine did not route the tick as a message"
     assert_no_strays
     pass "$CASE"
 }
@@ -259,7 +259,7 @@ case_tick_on_silent_broker() {
 case_deny_no_tick() {
     CASE="a refused subscription exits 5 without a clock"
     local rc
-    FAKE_SUB_MODE=deny timeout 15 "$AWKRED" -n -r examples --mqtt -h test.invalid >"$OUT" 2>"$ERR"
+    FAKE_SUB_MODE=deny timeout 15 "$AWKE" -n -r examples --mqtt -h test.invalid >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 5 )) || bad "exit $rc (124 means it hung), stderr: $(cat "$ERR")"
     grep -qF 'mosquitto_sub exited with status 5' "$ERR" || bad "stderr explains nothing: $(cat "$ERR")"
@@ -273,7 +273,7 @@ case_deny_no_tick() {
 case_deny_with_tick() {
     CASE="a refused subscription exits 5 with a clock (regression)"
     local rc
-    FAKE_SUB_MODE=deny timeout 15 "$AWKRED" -n -r examples --mqtt -h test.invalid --tick 1 >"$OUT" 2>"$ERR"
+    FAKE_SUB_MODE=deny timeout 15 "$AWKE" -n -r examples --mqtt -h test.invalid --tick 1 >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 5 )) || bad "exit $rc (124 means it hung), stderr: $(cat "$ERR")"
     assert_no_strays
@@ -283,7 +283,7 @@ case_deny_with_tick() {
 case_die_with_tick() {
     CASE="a subscriber that fails outright exits with its status"
     local rc
-    FAKE_SUB_MODE=die FAKE_SUB_CODE=3 timeout 15 "$AWKRED" -n -r examples --mqtt -h test.invalid --tick 1 \
+    FAKE_SUB_MODE=die FAKE_SUB_CODE=3 timeout 15 "$AWKE" -n -r examples --mqtt -h test.invalid --tick 1 \
         >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 3 )) || bad "exit $rc (124 means it hung), stderr: $(cat "$ERR")"
@@ -294,27 +294,27 @@ case_die_with_tick() {
 case_sigterm() {
     CASE="SIGTERM stops everything and exits 0"
     local rc
-    start_awkred -n -r examples --mqtt -h test.invalid --tick 1
+    start_awke -n -r examples --mqtt -h test.invalid --tick 1
     sleep 2.5
-    finish_awkred TERM
+    finish_awke TERM
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     assert_no_strays
     pass "$CASE"
 }
 
-# timeout starts awk-red in its own process group and signals the group, which is
-# what Ctrl-C does. It also means awk-red is not a background job of this script,
+# timeout starts awk-e in its own process group and signals the group, which is
+# what Ctrl-C does. It also means awk-e is not a background job of this script,
 # so it does not inherit SIGINT as ignored - which is exactly what a plain "&"
 # here would silently fail to test.
 case_sigint() {
     CASE="Ctrl-C stops everything and exits 0"
     timeout --preserve-status --signal=INT --kill-after=3 3 \
-        "$AWKRED" -n -r examples --mqtt -h test.invalid --tick 1 >"$OUT" 2>"$ERR"
+        "$AWKE" -n -r examples --mqtt -h test.invalid --tick 1 >"$OUT" 2>"$ERR"
     local rc=$?
     case $rc in
     0) ;;
-    137 | 124) bad "awk-red ignored SIGINT (exit $rc)" ;;
+    137 | 124) bad "awk-e ignored SIGINT (exit $rc)" ;;
     *) bad "exit $rc, stderr: $(cat "$ERR")" ;;
     esac
     assert_no_strays
@@ -324,9 +324,9 @@ case_sigint() {
 case_signal_without_tick() {
     CASE="a plain SIGTERM during a normal run exits 0"
     local rc
-    start_awkred -n -r examples --mqtt -h test.invalid
+    start_awke -n -r examples --mqtt -h test.invalid
     sleep 1.5
-    finish_awkred TERM
+    finish_awke TERM
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     assert_no_strays
@@ -334,20 +334,20 @@ case_signal_without_tick() {
 }
 
 # If stdbuf -oL goes from either stage, the engine buffers until a multiple of
-# 4-8 KB. This case looks at the output while awk-red is still running, so a
+# 4-8 KB. This case looks at the output while awk-e is still running, so a
 # block-buffered engine cannot pass by accident: it would have nothing to show
 # yet, and a killed process never flushes.
 case_buffering() {
     CASE="messages are not stuck in a buffer (stdbuf wiring)"
     export FAKE_SUB_MODE=buffered FAKE_SUB_COUNT=3
     export FAKE_SUB_TOPIC=home/door FAKE_SUB_PAYLOAD=open
-    start_awkred -n -q -r examples --mqtt -h test.invalid
+    start_awke -n -q -r examples --mqtt -h test.invalid
     unset FAKE_SUB_MODE FAKE_SUB_COUNT FAKE_SUB_TOPIC FAKE_SUB_PAYLOAD
     sleep 2
     local lines
     lines=$(grep -c '^DRYRUN> ' "$OUT")
     (( lines >= 2 )) || bad "only $lines published lines after 2 s of a live run: $(cat "$OUT")"
-    finish_awkred TERM
+    finish_awke TERM
     assert_no_strays
     pass "$CASE"
 }
@@ -355,7 +355,7 @@ case_buffering() {
 case_stream_routes() {
     CASE="a live stream reaches the rules"
     FAKE_SUB_MODE=stream FAKE_SUB_COUNT=3 \
-        timeout 8 "$AWKRED" -n -v -r examples --mqtt -h test.invalid >"$OUT" 2>"$ERR"
+        timeout 8 "$AWKE" -n -v -r examples --mqtt -h test.invalid >"$OUT" 2>"$ERR"
     local lines
     lines=$(grep -c 'route home/kitchen/temp' "$ERR")
     (( lines == 3 )) || bad "$lines of 3 messages routed, stderr: $(cat "$ERR")"
@@ -365,32 +365,32 @@ case_stream_routes() {
 case_validation() {
     CASE="bad clock values are usage errors"
     local rc
-    "$AWKRED" --tick abc -l >/dev/null 2>"$ERR"
+    "$AWKE" --tick abc -l >/dev/null 2>"$ERR"
     rc=$?
     (( rc == 2 )) || bad "--tick abc gave exit $rc"
-    "$AWKRED" --tick 5 -i examples/messages.log >/dev/null 2>"$ERR"
+    "$AWKE" --tick 5 -i examples/messages.log >/dev/null 2>"$ERR"
     rc=$?
     (( rc == 2 )) || bad "--tick with --input gave exit $rc"
-    "$AWKRED" --tick 0 -l >/dev/null 2>"$ERR"
+    "$AWKE" --tick 0 -l >/dev/null 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "--tick 0 gave exit $rc"
-    "$AWKRED" -l >/dev/null 2>"$ERR"
+    "$AWKE" -l >/dev/null 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "--list-rules gave exit $rc"
     # http validation
-    "$AWKRED" --http-port abc >/dev/null 2>"$ERR"
+    "$AWKE" --http-port abc >/dev/null 2>"$ERR"
     rc=$?
     (( rc == 2 )) || bad "--http-port abc gave exit $rc"
-    "$AWKRED" --http-port 99999 >/dev/null 2>"$ERR"
+    "$AWKE" --http-port 99999 >/dev/null 2>"$ERR"
     rc=$?
     (( rc == 2 )) || bad "--http-port 99999 gave exit $rc"
-    "$AWKRED" -P 0 >/dev/null 2>"$ERR"
+    "$AWKE" -P 0 >/dev/null 2>"$ERR"
     rc=$?
     (( rc == 2 )) || bad "-P 0 gave exit $rc"
-    "$AWKRED" --webhook -i examples/messages.log >/dev/null 2>"$ERR"
+    "$AWKE" --webhook -i examples/messages.log >/dev/null 2>"$ERR"
     rc=$?
     (( rc == 2 )) || bad "--webhook with -i gave exit $rc"
-    "$AWKRED" --mqtt -i examples/messages.log >/dev/null 2>"$ERR"
+    "$AWKE" --mqtt -i examples/messages.log >/dev/null 2>"$ERR"
     rc=$?
     (( rc == 2 )) || bad "--mqtt with -i gave exit $rc"
     pass "$CASE"
@@ -399,7 +399,7 @@ case_validation() {
 case_no_input() {
     CASE="running with no input source is a usage error"
     local rc
-    "$AWKRED" -n >/dev/null 2>"$ERR"
+    "$AWKE" -n >/dev/null 2>"$ERR"
     rc=$?
     (( rc == 2 )) || bad "no-input run gave exit $rc"
     grep -qF 'no input source' "$ERR" || bad "message missing: $(cat "$ERR")"
@@ -409,12 +409,12 @@ case_no_input() {
 
 case_help_and_version() {
     CASE="help lists both forms of every paired flag"
-    "$AWKRED" --help >"$OUT" 2>&1 || bad "help exited $?"
+    "$AWKE" --help >"$OUT" 2>&1 || bad "help exited $?"
     local flag
     for flag in -n --dry-run -h --host -i --input -r --rules --tick --mqtt --webhook; do
         grep -qF -- "$flag" "$OUT" || bad "help does not mention $flag"
     done
-    "$AWKRED" --version >/dev/null 2>&1 || bad "--version exited $?"
+    "$AWKE" --version >/dev/null 2>&1 || bad "--version exited $?"
     pass "$CASE"
 }
 
@@ -422,7 +422,7 @@ case_help_and_version() {
 case_http_off_by_default() {
     CASE="http is off by default"
     local banner
-    banner=$("$AWKRED" -n -r examples -q -i examples/messages.log 2>&1 >/dev/null)
+    banner=$("$AWKE" -n -r examples -q -i examples/messages.log 2>&1 >/dev/null)
     [[ $banner != *"http"* ]] || bad "the banner mentions http without --webhook"
     pass "$CASE"
 }
@@ -432,7 +432,7 @@ case_http_routes() {
     local rc rc_msg rc_prec port
     port=$((20000 + RANDOM % 10000))
     # An http-only run: -h is a broker setting, never an input of its own.
-    start_awkred -n -v --webhook -P "$port" -r test/rules
+    start_awke -n -v --webhook -P "$port" -r test/rules
     sleep 1.2
     http_get "$port" "/hook/x?m=HOOKPAYLOAD"
     rc=$?
@@ -443,7 +443,7 @@ case_http_routes() {
     # The client sees 200 before the listener has queued the engine line, so let
     # the engine drain it before the run is stopped.
     sleep 0.3
-    finish_awkred TERM
+    finish_awke TERM
     (( rc == 0 )) || bad "http client did not get 200 OK (m=)"
     (( rc_msg == 0 )) || bad "http client did not get 200 OK (msg=)"
     (( rc_prec == 0 )) || bad "http client did not get 200 OK (precedence)"
@@ -462,7 +462,7 @@ case_http_topic_override() {
     CASE="a topic= override names the topic and a bad one gives 400"
     local rc rc_empty rc_space port
     port=$((22000 + RANDOM % 10000))
-    start_awkred -n -v --webhook -P "$port" -r test/rules
+    start_awke -n -v --webhook -P "$port" -r test/rules
     sleep 1.2
     http_get "$port" "/hook/x?topic=custom/topic&m=OVERRIDE"
     rc=$?
@@ -472,7 +472,7 @@ case_http_topic_override() {
     http_get "$port" "/hook/x?topic=bad%20topic"
     rc_space=$?
     grep -qF '400 Bad Request' "$WORK/httpresp" || bad "whitespace topic= should give 400, got: $(cat "$WORK/httpresp")"
-    finish_awkred TERM
+    finish_awke TERM
     (( rc == 0 )) || bad "http client did not get 200 OK (topic override)"
     (( rc_empty != 0 )) || bad "empty topic= should not give 200 OK"
     (( rc_space != 0 )) || bad "whitespace topic= should not give 200 OK"
@@ -490,7 +490,7 @@ case_http_no_payload() {
     CASE="a payload-less request is refused; explicit empty and one-line body are fine"
     local rc_none rc_fav rc_empty rc_nl rc_ml rc_body rc_body_nl port
     port=$((23000 + RANDOM % 10000))
-    start_awkred -n -v --webhook -P "$port" -r test/rules
+    start_awke -n -v --webhook -P "$port" -r test/rules
     sleep 1.2
     http_get "$port" "/hook/x"
     rc_none=$?
@@ -511,7 +511,7 @@ case_http_no_payload() {
     http_post "$port" "/hook/n" $'with nl\n'
     rc_body_nl=$?
     sleep 0.3
-    finish_awkred TERM
+    finish_awke TERM
     (( rc_none != 0 )) || bad "no payload should not give 200 OK"
     (( rc_fav != 0 )) || bad "favicon should not give 200 OK"
     (( rc_nl != 0 )) || bad "newline in m= should not give 200 OK"
@@ -534,7 +534,7 @@ case_http_bad_content_length() {
     CASE="a hostile Content-Length is refused without killing the listener"
     local rc port
     port=$((23000 + RANDOM % 10000))
-    start_awkred -n -v --webhook -P "$port" -r test/rules
+    start_awke -n -v --webhook -P "$port" -r test/rules
     sleep 1.2
     http_raw "$port" $'POST /hook/big HTTP/1.1\r\nHost: t\r\nContent-Length: 999999999999\r\nConnection: close\r\n\r\n'
     rc=$?
@@ -545,7 +545,7 @@ case_http_bad_content_length() {
     http_get "$port" "/hook/x?m=ALIVE"
     rc=$?
     sleep 0.3
-    finish_awkred TERM
+    finish_awke TERM
     (( rc == 0 )) || bad "listener did not survive a hostile Content-Length"
     grep -qF "DRYRUN> echo hook 'ALIVE'" "$OUT" || bad "request after the hostile one not routed, got: $(cat "$OUT")"
     assert_no_strays
@@ -563,7 +563,7 @@ case_http_port_taken() {
     # gawk binds on first use of the /inet/tcp file and then blocks in accept()
     # for as long as it is held. Wait for the listen to appear in /proc/net/tcp
     # - a connect would consume that one accept() and release the port, letting
-    # awk-red's preflight "win" and the run hang instead of failing fast.
+    # awk-e's preflight "win" and the run hang instead of failing fast.
     local hex
     hex=$(printf '%04X' "$port")
     listening() { grep -q ":${hex} 00000000:0000 0A " /proc/net/tcp 2>/dev/null; }
@@ -575,9 +575,9 @@ case_http_port_taken() {
         kill $occup 2>/dev/null; wait $occup 2>/dev/null
         bad "port $port never became busy"
     fi
-    # The preflight must fail fast and exit 1. If anything makes awk-red go
+    # The preflight must fail fast and exit 1. If anything makes awk-e go
     # live instead, timeout keeps the suite from hanging forever on it.
-    timeout 15 "$AWKRED" -n -q -r examples --webhook -P "$port" >/dev/null 2>"$ERR"
+    timeout 15 "$AWKE" -n -q -r examples --webhook -P "$port" >/dev/null 2>"$ERR"
     rc=$?
     kill $occup 2>/dev/null; wait $occup 2>/dev/null
     (( rc == 1 )) || bad "exit $rc (expected 1), stderr: $(cat "$ERR")"
@@ -590,7 +590,7 @@ case_http_deny() {
     CASE="http with refused subscription exits 5 without hang"
     local rc port
     port=$((22000 + RANDOM % 10000))
-    FAKE_SUB_MODE=deny timeout 15 "$AWKRED" -n -r examples --mqtt --webhook -P "$port" -h test.invalid >/dev/null 2>"$ERR"
+    FAKE_SUB_MODE=deny timeout 15 "$AWKE" -n -r examples --mqtt --webhook -P "$port" -h test.invalid >/dev/null 2>"$ERR"
     rc=$?
     (( rc == 5 )) || bad "exit $rc (124 means hung), stderr: $(cat "$ERR")"
     assert_no_strays
@@ -601,9 +601,9 @@ case_http_sigterm() {
     CASE="http listener stops cleanly on SIGTERM"
     local rc port
     port=$((23000 + RANDOM % 10000))
-    start_awkred -n -r examples --webhook -P "$port"
+    start_awke -n -r examples --webhook -P "$port"
     sleep 1.0
-    finish_awkred TERM
+    finish_awke TERM
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     assert_no_strays
@@ -611,8 +611,8 @@ case_http_sigterm() {
 }
 case_list_rules() {
     CASE="every example rule is discovered"
-    "$AWKRED" -l -r examples >"$OUT" 2>&1 || bad "--list-rules exited $?"
-    grep -qF '^awk-red/tick(/.*)?$' "$OUT" || bad "no heartbeat rule listed"
+    "$AWKE" -l -r examples >"$OUT" 2>&1 || bad "--list-rules exited $?"
+    grep -qF '^awk-e/tick(/.*)?$' "$OUT" || bad "no heartbeat rule listed"
     grep -qF '9 rule(s), 2 json(s), 0 smooth(s), 0 limit(s)' "$OUT" || bad "unexpected rule count: $(cat "$OUT")"
     pass "$CASE"
 }
@@ -624,7 +624,7 @@ case_mqtt_wildcards() {
     CASE="the default reg() matches + and # the way a subscription does"
     local rc
     printf 'mqtt/room/temp 21\nmqtt/room/sub/temp 22\nmqtt/tree hi\nmqtt/tree/a/b yo\nmqtt/lit/v1.0/x 5\nmqtt/lit/v1x0/x 6\n' \
-        | "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+        | "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF "DRYRUN> echo plus 'mqtt/room/temp=21'" "$OUT" \
@@ -644,7 +644,7 @@ case_mqtt_wildcards() {
 # the original filter is kept beside it for the reader.
 case_mqtt_lists() {
     CASE="an MQTT rule is listed with its filter and generated regex"
-    "$AWKRED" -l -r test/rules >"$OUT" 2>&1 || bad "--list-rules exited $?"
+    "$AWKE" -l -r test/rules >"$OUT" 2>&1 || bad "--list-rules exited $?"
     grep -qF '^mqtt/[^/]+/temp$' "$OUT" || bad "generated regex not listed: $(cat "$OUT")"
     grep -qF '[mqtt/+/temp]' "$OUT" || bad "no filter annotation: $(cat "$OUT")"
     pass "$CASE"
@@ -657,7 +657,7 @@ case_limit_drop() {
     CASE="a rate-limited topic drops messages inside its window"
     local rc
     printf 'noise/x 1\nnoise/x 2\nnoise/y 1\nnoise/x 3\n' \
-        | "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+        | "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     [[ $(grep -c '^DRYRUN> echo limited ' "$OUT") == 2 ]] \
@@ -672,13 +672,13 @@ case_limit_drop() {
 }
 
 # Expiry must not be waited for on real time, and a burst on the real clock can
-# straddle a second boundary, so the engine's clock can step: AWKRED_TEST_STEP=60
+# straddle a second boundary, so the engine's clock can step: AWKE_TEST_STEP=60
 # advances one 60 s window per check, which is what makes this deterministic.
 case_limit_expiry() {
     CASE="messages flow again once the limit window has passed"
     local rc
     printf 'noise/x 1\nnoise/x 2\nnoise/x 3\n' \
-        | AWKRED_TEST_STEP=60 "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+        | AWKE_TEST_STEP=60 "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     [[ $(grep -c '^DRYRUN> echo limited ' "$OUT") == 3 ]] \
@@ -688,7 +688,7 @@ case_limit_expiry() {
 
 case_limit_lists() {
     CASE="a registered limit is listed by --list-rules"
-    "$AWKRED" -l -r test/rules >"$OUT" 2>&1 || bad "--list-rules exited $?"
+    "$AWKE" -l -r test/rules >"$OUT" 2>&1 || bad "--list-rules exited $?"
     grep -qF 'limit   ^noise(/.*)?$' "$OUT" || bad "no limit row: $(cat "$OUT")"
     grep -qF '3 limit(s)' "$OUT" || bad "summary has no limit count: $(cat "$OUT")"
     pass "$CASE"
@@ -696,7 +696,7 @@ case_limit_lists() {
 
 case_smooth_lists() {
     CASE="a registered smoother is listed by --list-rules"
-    "$AWKRED" -l -r test/rules >"$OUT" 2>&1 || bad "--list-rules exited $?"
+    "$AWKE" -l -r test/rules >"$OUT" 2>&1 || bad "--list-rules exited $?"
     grep -qF 'smooth  ^smooth(/.*)?$' "$OUT" || bad "no smooth row: $(cat "$OUT")"
     grep -qF '3 smooth(s)' "$OUT" || bad "summary has no smooth count: $(cat "$OUT")"
     pass "$CASE"
@@ -710,7 +710,7 @@ case_json_stream() {
     local rc
     command -v jq >/dev/null 2>&1 || bad "jq is not installed"
     printf 'json/a {"temperature": 100}\njson/a {"temperature": 200}\njson/a {"temperature": 300}\n' \
-        | "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+        | "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF "DRYRUN> echo extracted '100'" "$OUT" \
@@ -730,7 +730,7 @@ case_split_recipe() {
     local rc
     command -v jq >/dev/null 2>&1 || bad "jq is not installed"
     printf 'split/s {"temperature": 21.5, "humidity": 41}\n' \
-        | "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+        | "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF "DRYRUN> mosquitto_pub " "$OUT" \
@@ -745,7 +745,7 @@ case_split_recipe() {
 }
 
 # A publish broker of its own: MQTT_PUB_* overrides MQTT_* for pub() and
-# pub_retained(), leaving the subscription settings alone, so awk-red can
+# pub_retained(), leaving the subscription settings alone, so awk-e can
 # bridge two brokers. Both publishers must pick up every override.
 case_pub_broker_override() {
     CASE="MQTT_PUB_* overrides MQTT_* for pub()"
@@ -755,7 +755,7 @@ case_pub_broker_override() {
           MQTT_TLS=0 MQTT_PUB_HOST=pub.example MQTT_PUB_PORT=8883 \
           MQTT_PUB_USER=pu MQTT_PUB_PASS=pp MQTT_PUB_TLS=1 \
           MQTT_PUB_CAFILE=/tmp/pub-ca.pem MQTT_PUB_CLIENT_ID=pubber \
-          "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+          "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF "mosquitto_pub -h 'pub.example' -p '8883' -u 'pu' -P 'pp' --cafile '/tmp/pub-ca.pem' -i 'pubber' -t 'pub/out' -m 'hi'" "$OUT" \
@@ -776,7 +776,7 @@ case_pub_broker_fallback() {
           MQTT_TLS=0 MQTT_CLIENT_ID=sid \
           MQTT_PUB_HOST= MQTT_PUB_PORT= MQTT_PUB_USER= MQTT_PUB_PASS= \
           MQTT_PUB_TLS= MQTT_PUB_CAFILE= MQTT_PUB_CLIENT_ID= \
-          "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+          "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF "mosquitto_pub -h 'sub.example' -p '1884' -u 'su' -P 'sp' -i 'sid' -t 'pub/out' -m 'hi'" "$OUT" \
@@ -793,12 +793,12 @@ case_pub_failure() {
         | PATH="$PWD/test/bin:$PATH" FAKE_PUB_MODE=fail \
           MQTT_HOST=localhost MQTT_PORT=1883 MQTT_TLS=0 \
           MQTT_PUB_HOST= MQTT_PUB_PORT= \
-          "$AWKRED" -q --gateway -i - >"$OUT" 2>"$ERR"
+          "$AWKE" -q --gateway -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "a failed publish changed the exit status: $rc ($(cat "$ERR"))"
     grep -qF 'Error: Connection refused' "$ERR" \
         || bad "mosquitto_pub's own reason was lost: $(cat "$ERR")"
-    grep -qF "awk-red: error: publish to localhost:1883 failed: mosquitto_pub exited with status 1" "$ERR" \
+    grep -qF "awk-e: error: publish to localhost:1883 failed: mosquitto_pub exited with status 1" "$ERR" \
         || bad "no attributed publish error: $(cat "$ERR")"
     grep -qF '(is the broker running?)' "$ERR" \
         || bad "no hint that the broker may be down: $(cat "$ERR")"
@@ -806,7 +806,7 @@ case_pub_failure() {
         | PATH="$PWD/test/bin:$PATH" FAKE_PUB_MODE=ok \
           MQTT_HOST=localhost MQTT_PORT=1883 MQTT_TLS=0 \
           MQTT_PUB_HOST= MQTT_PUB_PORT= \
-          "$AWKRED" -q --gateway -i - >"$OUT" 2>"$ERR"
+          "$AWKE" -q --gateway -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "a successful publish changed the exit status: $rc ($(cat "$ERR"))"
     grep -qF 'error: publish' "$ERR" && bad "a successful publish was reported as failed: $(cat "$ERR")"
@@ -819,7 +819,7 @@ case_gateway_forwards() {
     CASE="gateway republishes only unmatched messages"
     local rc
     printf 'gateway/loose hi\nedge/x on\n' \
-        | MQTT_TLS=0 "$AWKRED" -n -q --gateway -r test/rules -i - >"$OUT" 2>"$ERR"
+        | MQTT_TLS=0 "$AWKE" -n -q --gateway -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF -- "-t 'gateway/loose' -m 'hi'" "$OUT" \
@@ -838,7 +838,7 @@ case_gateway_chained() {
     CASE="gateway forwards an unmatched chained event"
     local rc
     printf 'chain/orphan hi\n' \
-        | MQTT_TLS=0 "$AWKRED" -n -q --gateway -r test/rules -i - >"$OUT" 2>"$ERR"
+        | MQTT_TLS=0 "$AWKE" -n -q --gateway -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF -- "-t 'chain/unmatched' -m 'hi'" "$OUT" \
@@ -854,13 +854,13 @@ case_gateway_empty_rules() {
     local rc emptydir="$WORK/empty-rules"
     mkdir -p "$emptydir"
     printf 'anything/goes x\n' \
-        | MQTT_TLS=0 "$AWKRED" -n -q --gateway -r "$emptydir" -i - >"$OUT" 2>"$ERR"
+        | MQTT_TLS=0 "$AWKE" -n -q --gateway -r "$emptydir" -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "gateway with no rules gave exit $rc: $(cat "$ERR")"
     grep -qF -- "-t 'anything/goes' -m 'x'" "$OUT" \
         || bad "gateway did not forward with no rules: $(cat "$OUT")"
     printf 'anything/goes x\n' \
-        | "$AWKRED" -n -q -r "$emptydir" -i - >"$OUT" 2>"$ERR"
+        | "$AWKE" -n -q -r "$emptydir" -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 2 )) || bad "no rules without gateway gave exit $rc: $(cat "$ERR")"
     grep -qF 'no *.awk rule files to load' "$ERR" || bad "no-rule message missing: $(cat "$ERR")"
@@ -873,11 +873,11 @@ case_gateway_empty_rules() {
 case_no_default_rules() {
     CASE="the examples are not loaded, and a rule-less run is refused"
     local rc
-    "$AWKRED" -n -q -i examples/messages.log >"$OUT" 2>"$ERR"
+    "$AWKE" -n -q -i examples/messages.log >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 2 )) || bad "rule-less default run gave exit $rc: $(cat "$ERR")"
     grep -qF 'no *.awk rule files to load' "$ERR" || bad "no-rule message missing: $(cat "$ERR")"
-    "$AWKRED" -l >"$OUT" 2>&1 || bad "--list-rules exited $?"
+    "$AWKE" -l >"$OUT" 2>&1 || bad "--list-rules exited $?"
     grep -qF 'rules from (none)' "$OUT" || bad "default --list-rules header wrong: $(cat "$OUT")"
     grep -qF 'nothing registered' "$OUT" || bad "default --list-rules lists rules: $(cat "$OUT")"
     pass "$CASE"
@@ -888,11 +888,11 @@ case_no_default_rules() {
 case_gateway_mqtt_guard() {
     CASE="gateway with --mqtt requires a separate publish broker"
     local rc
-    "$AWKRED" --gateway --mqtt -l >"$OUT" 2>"$ERR"
+    "$AWKE" --gateway --mqtt -l >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 2 )) || bad "same-broker gateway+mqtt gave exit $rc"
     grep -qF 'separate publish broker' "$ERR" || bad "guard message missing: $(cat "$ERR")"
-    MQTT_PUB_HOST=pub.example "$AWKRED" --gateway --mqtt -l >"$OUT" 2>"$ERR"
+    MQTT_PUB_HOST=pub.example "$AWKE" --gateway --mqtt -l >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "gateway+mqtt with a second broker gave exit $rc: $(cat "$ERR")"
     pass "$CASE"
@@ -906,7 +906,7 @@ case_chain_inprocess() {
     local rc
     command -v jq >/dev/null 2>&1 || bad "jq is not installed"
     printf 'chain/split {"temperature": 21, "humidity": 40}\n' \
-        | "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+        | "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF "DRYRUN> echo chained-temp '21'" "$OUT" \
@@ -926,7 +926,7 @@ case_chain_pipeline() {
     local rc
     command -v jq >/dev/null 2>&1 || bad "jq is not installed"
     printf 'chain/numsrc 7\n' \
-        | "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+        | "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF "DRYRUN> echo chained-num '7'" "$OUT" \
@@ -935,13 +935,13 @@ case_chain_pipeline() {
 }
 
 # A chain that keeps matching its own topic must be cut off, not spun. The
-# guard drops the event once it exceeds AWKRED_CHAIN_MAX and warns; without it
+# guard drops the event once it exceeds AWKE_CHAIN_MAX and warns; without it
 # the run would never end.
 case_chain_loop_guard() {
     CASE="a self-matching chain is cut off, not spun"
     local rc
     printf 'chain/loop x\n' \
-        | AWKRED_CHAIN_MAX=4 timeout 15 "$AWKRED" -n -q -r test/rules -i - \
+        | AWKE_CHAIN_MAX=4 timeout 15 "$AWKE" -n -q -r test/rules -i - \
             >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc (124 means it spun), stderr: $(cat "$ERR")"
@@ -957,7 +957,7 @@ case_smooth_after_json() {
     local rc
     command -v jq >/dev/null 2>&1 || bad "jq is not installed"
     printf 'smooth/json {"temperature": 100}\nsmooth/json {"temperature": 0}\nsmooth/json {"temperature": 0}\n' \
-        | "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+        | "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF "DRYRUN> echo smoothed 'smooth/json 100'" "$OUT" \
@@ -976,7 +976,7 @@ case_smooth_ema() {
     CASE="a smoothed topic averages with the factor, per topic"
     local rc
     printf 'smooth/x 100\nsmooth/x 0\nsmooth/x 0\nsmooth/y 7\n' \
-        | "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+        | "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF "DRYRUN> echo smoothed 'smooth/x 100'" "$OUT" \
@@ -994,7 +994,7 @@ case_smooth_nonnumeric() {
     CASE="a non-numeric payload passes through and leaves the state alone"
     local rc
     printf 'smooth/x 100\nsmooth/x open\nsmooth/x 0\n' \
-        | "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+        | "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF "DRYRUN> echo smoothed 'smooth/x open'" "$OUT" \
@@ -1007,13 +1007,13 @@ case_smooth_nonnumeric() {
 # Smoothing runs before the limiter, so the average sees the messages the
 # limiter drops: 100 seeds, the dropped 0 still moves the state to 50, and the
 # next message through the open window carries 25. A smoother on the far side
-# of the limiter would miss the dropped 0 and emit 50. AWKRED_TEST_STEP=40
+# of the limiter would miss the dropped 0 and emit 50. AWKE_TEST_STEP=40
 # walks the 60 s window: t, t+40 (inside), t+80 (expired), no sleeping.
 case_smooth_before_limit() {
     CASE="the smoother sees the messages the limiter drops"
     local rc
     printf 'throttle/x 100\nthrottle/x 0\nthrottle/x 0\n' \
-        | AWKRED_TEST_STEP=40 "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+        | AWKE_TEST_STEP=40 "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF "DRYRUN> echo smoothed 'throttle/x 100'" "$OUT" \
@@ -1030,13 +1030,13 @@ case_smooth_before_limit() {
 case_tick_only() {
     CASE="the clock alone runs with no broker input"
     local rc ticks
-    start_awkred -n -v -r examples --tick 1
+    start_awke -n -v -r examples --tick 1
     sleep 2.5
     ticks=$(grep -c '^DRYRUN> ' "$OUT")
     (( ticks >= 2 )) || bad "only $ticks ticks in 2.5 s"
-    grep -qF 'route awk-red/tick/' "$ERR" || bad "tick not routed: $(cat "$ERR")"
+    grep -qF 'route awk-e/tick/' "$ERR" || bad "tick not routed: $(cat "$ERR")"
     grep -qF 'broker' "$ERR" && bad "the banner mentions a broker without --mqtt"
-    finish_awkred TERM
+    finish_awke TERM
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     assert_no_strays
@@ -1049,7 +1049,7 @@ case_http_death() {
     CASE="a killed http listener ends the run with its status"
     local rc port listener
     port=$((24000 + RANDOM % 10000))
-    start_awkred -n -r examples --webhook -P "$port"
+    start_awke -n -r examples --webhook -P "$port"
     sleep 1.0
     listener=$(pgrep -g "$RUN_PID" -f 'lib/http\.awk' | head -n 1)
     if [[ -z $listener ]]; then
@@ -1057,7 +1057,7 @@ case_http_death() {
     else
         kill -KILL "$listener" 2>/dev/null || true
     fi
-    wait_awkred
+    wait_awke
     rc=$?
     (( rc == 137 )) || bad "exit $rc (expected 137), stderr: $(cat "$ERR")"
     grep -qF 'http listener exited with status 137' "$ERR" || bad "stderr: $(cat "$ERR")"
@@ -1068,7 +1068,7 @@ case_http_death() {
 case_pipe_stream() {
     CASE="a pipe input routes to rules and stays alive when streaming"
     FAKE_PIPE_MODE=emit FAKE_PIPE_COUNT=2 \
-        timeout 8 "$AWKRED" -n -v -r test/rules --pipe "$PWD/test/fake-pipe" >"$OUT" 2>"$ERR"
+        timeout 8 "$AWKE" -n -v -r test/rules --pipe "$PWD/test/fake-pipe" >"$OUT" 2>"$ERR"
     local lines
     lines=$(grep -c 'route pipe/x' "$ERR")
     (( lines == 2 )) || bad "$lines of 2 messages routed, stderr: $(cat "$ERR")"
@@ -1080,7 +1080,7 @@ case_pipe_fail_stream() {
     CASE="a streaming pipe that dies ends the run with its status"
     local rc
     FAKE_PIPE_MODE=die FAKE_PIPE_CODE=3 \
-        timeout 15 "$AWKRED" -n -r test/rules --pipe "$PWD/test/fake-pipe" >"$OUT" 2>"$ERR"
+        timeout 15 "$AWKE" -n -r test/rules --pipe "$PWD/test/fake-pipe" >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 3 )) || bad "exit $rc (124 means hung), stderr: $(cat "$ERR")"
     grep -qF 'pipe command exited with status 3' "$ERR" || bad "stderr: $(cat "$ERR")"
@@ -1095,10 +1095,10 @@ case_pipe_every_flaky() {
     # --every polls for ever, so this is a live run: start it, give the failed
     # first poll and the successful second one time to happen, and stop it.
     export FAKE_PIPE_MODE=flaky FAKE_PIPE_FAIL=1 FAKE_PIPE_STATE="$state"
-    start_awkred -n -q -r test/rules --pipe "$PWD/test/fake-pipe" --every 1
+    start_awke -n -q -r test/rules --pipe "$PWD/test/fake-pipe" --every 1
     unset FAKE_PIPE_MODE FAKE_PIPE_FAIL FAKE_PIPE_STATE
     sleep 3
-    finish_awkred TERM
+    finish_awke TERM
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF "DRYRUN> echo pipe 'pipe/x=hello'" "$OUT" || bad "did not recover: $(cat "$OUT")"
@@ -1110,7 +1110,7 @@ case_pipe_changed() {
     CASE="--changed suppresses repeated payloads for a pipe"
     # The fake emits the same line twice; without --changed both route.
     FAKE_PIPE_MODE=emit FAKE_PIPE_COUNT=2 \
-        timeout 6 "$AWKRED" -n -q -r test/rules --pipe "$PWD/test/fake-pipe" --changed >"$OUT" 2>"$ERR"
+        timeout 6 "$AWKE" -n -q -r test/rules --pipe "$PWD/test/fake-pipe" --changed >"$OUT" 2>"$ERR"
     local ecount
     ecount=$(grep -c "DRYRUN> echo pipe" "$OUT")
     (( ecount == 1 )) || bad "expected 1 echo for two repeated lines with --changed, got $ecount: $(cat "$OUT")"
@@ -1120,7 +1120,7 @@ case_pipe_changed() {
 case_pipe_input_conflict() {
     CASE="--pipe conflicts with --input"
     local rc
-    "$AWKRED" --pipe "$PWD/test/fake-pipe" -i examples/messages.log >/dev/null 2>"$ERR"
+    "$AWKE" --pipe "$PWD/test/fake-pipe" -i examples/messages.log >/dev/null 2>"$ERR"
     rc=$?
     (( rc == 2 )) || bad "--pipe with --input gave exit $rc"
     pass "$CASE"
@@ -1131,7 +1131,7 @@ case_pipe_with_mqtt_coexist() {
     # The subscriber is the terminator here and stays connected, so the run is
     # stopped by the timeout; only the pipe's own delivery is asserted.
     FAKE_PIPE_MODE=once FAKE_PIPE_COUNT=1 FAKE_SUB_MODE=accept \
-        timeout 8 "$AWKRED" -n -q -r test/rules --pipe "$PWD/test/fake-pipe" --mqtt -h test.invalid >"$OUT" 2>"$ERR"
+        timeout 8 "$AWKE" -n -q -r test/rules --pipe "$PWD/test/fake-pipe" --mqtt -h test.invalid >"$OUT" 2>"$ERR"
     grep -qF "DRYRUN> echo pipe 'pipe/x=hello'" "$OUT" || bad "pipe echo missing: $(cat "$OUT")"
     pass "$CASE"
 }
@@ -1145,7 +1145,7 @@ case_pipe_modbus_recipe() {
 MAP
     MBPOLL="$PWD/test/bin/mbpoll" \
     MODBUS_HOST=test.local MODBUS_PORT=502 MODBUS_MAP="$maprc" \
-    timeout 6 "$AWKRED" -n -q -r test/rules --pipe "$PWD/examples/modbus.sh test.local '$maprc'" >"$OUT" 2>"$ERR"
+    timeout 6 "$AWKE" -n -q -r test/rules --pipe "$PWD/examples/modbus.sh test.local '$maprc'" >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF "DRYRUN> echo pipe 'modbus/test/t1=1100'" "$OUT" || bad "t1 missing: $(cat "$OUT")"
@@ -1157,7 +1157,7 @@ case_changed_drop() {
     CASE="changed() drops a repeated payload before routing"
     local rc
     printf 'edge/x on\nedge/x on\nedge/y on\nedge/x off\nedge/x off\n' \
-        | "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+        | "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     [[ $(grep -c '^DRYRUN> echo edge ' "$OUT") == 3 ]] \
@@ -1170,7 +1170,7 @@ case_changed_drop() {
 
 case_changed_lists() {
     CASE="a registered change detector is listed by --list-rules"
-    "$AWKRED" -l -r test/rules >"$OUT" 2>&1 || bad "--list-rules exited $?"
+    "$AWKE" -l -r test/rules >"$OUT" 2>&1 || bad "--list-rules exited $?"
     grep -qF 'changed ^edge(/.*)?$' "$OUT" || bad "no changed row: $(cat "$OUT")"
     grep -qF '2 changed(s)' "$OUT" || bad "summary has no changed count: $(cat "$OUT")"
     pass "$CASE"
@@ -1182,7 +1182,7 @@ case_regexp_matching() {
     CASE="the _re() forms still match what + and # cannot express"
     local rc
     printf 're/a/two 1\nre/c/two 2\nre/ol/abc 3\nre/ol/ABC 4\n' \
-        | "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+        | "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF "DRYRUN> echo alt 're/a/two=1'" "$OUT" \
@@ -1203,7 +1203,7 @@ case_regexp_stages() {
     CASE="the smooth/limit/changed _re() forms route like the MQTT forms"
     local rc
     printf 're/edge/7 on\nre/edge/7 on\nre/edge/7 off\nre/lim/1 1\nre/lim/1 2\nre/lim/2 1\nre/sm/5 5\nre/sm/5 7\n' \
-        | "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+        | "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     [[ $(grep -c '^DRYRUN> echo red ' "$OUT") == 2 ]] \
@@ -1229,7 +1229,7 @@ case_regexp_json() {
     local rc
     command -v jq >/dev/null 2>&1 || bad "jq is not installed"
     printf 're/json/a {"value": 9}\nre/json/c {"value": 8}\n' \
-        | "$AWKRED" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
+        | "$AWKE" -n -q -r test/rules -i - >"$OUT" 2>"$ERR"
     rc=$?
     (( rc == 0 )) || bad "exit $rc, stderr: $(cat "$ERR")"
     grep -qF "DRYRUN> echo rjs 're/json/a 9'" "$OUT" \
@@ -1244,7 +1244,7 @@ case_regexp_json() {
 case_regexp_lists() {
     CASE="a _re rule is listed with its regex and no mqtt annotation"
     local line
-    "$AWKRED" -l -r test/rules >"$OUT" 2>&1 || bad "--list-rules exited $?"
+    "$AWKE" -l -r test/rules >"$OUT" 2>&1 || bad "--list-rules exited $?"
     grep -qF '^re/(a|b)/two$' "$OUT" || bad "no _re rule listed: $(cat "$OUT")"
     line=$(grep -F '^re/(a|b)/two$' "$OUT")
     [[ $line == *"["* ]] && bad "a _re rule was annotated as MQTT: $line"
@@ -1320,7 +1320,7 @@ cases=(
     case_regexp_lists
 )
 
-printf 'awk-red test suite\n\n'
+printf 'awk-e test suite\n\n'
 for c in "${cases[@]}"; do
     [[ -n $FILTER && $c != *"$FILTER"* ]] && continue
     CASE=""

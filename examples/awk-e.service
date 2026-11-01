@@ -1,14 +1,14 @@
 [Unit]
-Description=awk-red MQTT event router
-Documentation=file:/usr/local/share/doc/awk-red/README.md
+Description=awk-e MQTT event router
+Documentation=file:/usr/local/share/doc/awk-e/README.md
 After=network-online.target mosquitto.service
 Wants=network-online.target
 
 [Service]
 Type=simple
 # --mqtt is the subscription: inputs are opt-in, so a unit that wants broker
-# traffic has to ask for it (AWKRED_MQTT=1 in the .env works too).
-ExecStart=/usr/local/bin/awk-red -q --mqtt -e /etc/awk-red/.env -r /etc/awk-red/rules
+# traffic has to ask for it (AWKE_MQTT=1 in the .env works too).
+ExecStart=/usr/local/bin/awk-e -q --mqtt -e /etc/awk-e/.env -r /etc/awk-e/rules
 Restart=always
 RestartSec=5
 
@@ -17,7 +17,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/etc/awk-red
+ReadWritePaths=/etc/awk-e
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX

@@ -1,7 +1,7 @@
-# lib/router.awk - awk-red core engine
+# lib/router.awk - awk-e core engine
 #
 # The engine never changes when automations are added. It owns:
-#   * configuration (environment, .env values already exported by ./awk-red)
+#   * configuration (environment, .env values already exported by ./awk-e)
 #   * the dispatch table: reg() / route()
 #   * side effects: emit(), pub(), notify via MQTT or any other command
 #   * JSON extraction, so rules never care whether a topic is plain or JSON
@@ -20,7 +20,7 @@
 # + and # wildcards. The _re forms (reg_re(), ...) take a regular expression
 # instead, for the cases a filter cannot express.
 #
-# Do not run this file directly - use ./awk-red, which adds the rule files,
+# Do not run this file directly - use ./awk-e, which adds the rule files,
 # line-buffers both pipeline stages and passes the configuration.
 #
 # Requires gawk >= 4.0 (indirect calls, two-way coprocesses, strftime()).
@@ -117,7 +117,7 @@ function register_rule(pattern, handler, description) {
 #   #   the rest of the topic  device/#
 # It is rewritten to an anchored regex once, here in BEGIN, so routing never
 # pays for the translation. All matching rules run, in registration order (which
-# is the load order of the rule files); AWKRED_FIRST_MATCH=1 stops after the
+# is the load order of the rule files); AWKE_FIRST_MATCH=1 stops after the
 # first. The original filter is kept only for --list-rules. For a pattern that a
 # filter cannot express, use reg_re().
 function reg(filter, handler, description,    re) {
@@ -324,7 +324,7 @@ function limit_re(pattern, seconds) {
 }
 
 # The clock a limit window is measured against: systime(), whose one-second
-# resolution is the resolution of a window. AWKRED_TEST_STEP is a test seam,
+# resolution is the resolution of a window. AWKE_TEST_STEP is a test seam,
 # not configuration (like MOSQ_SUB it exists so test/ can produce a behaviour
 # deterministically): when it is set, clock() starts at the real time and
 # advances by that many seconds per check, so a test can cross a window
@@ -415,7 +415,7 @@ function route(topic, payload,    i, hits, fn) {
     if (hits == 0) {
         if (GATEWAY) {
             # Gateway mode: an unmatched message is forwarded unchanged to the
-            # publish broker, so awk-red bridges without any rule. A message
+            # publish broker, so awk-e bridges without any rule. A message
             # that matched is never republished here - the rule owns it - so an
             # acting rule and the gateway cannot double-publish.
             debug("gateway " topic " (" payload ")")
@@ -552,14 +552,14 @@ BEGIN {
     STDERR = "/dev/stderr"
     CA_BUNDLE = "/etc/ssl/certs/ca-certificates.crt"
 
-    PROG = getenv("AWKRED_PROG", "awk-red")
+    PROG = getenv("AWKE_PROG", "awk-e")
     DRYRUN = envbool("DRYRUN", "0")
-    VERBOSE = envbool("AWKRED_VERBOSE", "0")
-    QUIET = envbool("AWKRED_QUIET", "0")
-    LIST = envbool("AWKRED_LIST", "0")
-    FIRST_MATCH = envbool("AWKRED_FIRST_MATCH", "0")
-    GATEWAY = envbool("AWKRED_GATEWAY", "0")
-    RULES_DIR = getenv("AWKRED_RULES", "(none)")
+    VERBOSE = envbool("AWKE_VERBOSE", "0")
+    QUIET = envbool("AWKE_QUIET", "0")
+    LIST = envbool("AWKE_LIST", "0")
+    FIRST_MATCH = envbool("AWKE_FIRST_MATCH", "0")
+    GATEWAY = envbool("AWKE_GATEWAY", "0")
+    RULES_DIR = getenv("AWKE_RULES", "(none)")
 
     MQTT_HOST = getenv("MQTT_HOST", "localhost")
     MQTT_PORT = getenv("MQTT_PORT", "1883")
@@ -581,8 +581,8 @@ BEGIN {
     PUB_TLS = (getenv("MQTT_PUB_TLS", "") != "") ? envbool("MQTT_PUB_TLS", "0") : MQTT_TLS
 
     PUB_CMD = build_pub_cmd()
-    CLOCK_STEP = getenv("AWKRED_TEST_STEP", "0") + 0
-    CHAIN_MAX = getenv("AWKRED_CHAIN_MAX", "32") + 0
+    CLOCK_STEP = getenv("AWKE_TEST_STEP", "0") + 0
+    CHAIN_MAX = getenv("AWKE_CHAIN_MAX", "32") + 0
     if (CHAIN_MAX < 1)
         CHAIN_MAX = 32
     CHAIN_READ = 0

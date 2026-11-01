@@ -25,22 +25,22 @@ failed` and the failing case named.
 | `rules/regexp.awk` | the rule the `_re()` cases route through: alternation, a char class, and every `_re()` stage |
 | `expected/messages.log.out` | golden output for the replay case |
 
-`awk-red` reads `MOSQ_SUB` from the environment, which is what lets the suite
-replace the subscriber; the engine reads `AWKRED_TEST_STEP`, which steps its
+`awk-e` reads `MOSQ_SUB` from the environment, which is what lets the suite
+replace the subscriber; the engine reads `AWKE_TEST_STEP`, which steps its
 clock so a window can be crossed without sleeping - that is how the rate-limit
 expiry case, and the smoothing-runs-before-the-limiter case, stay deterministic.
 Nothing else
-about the run is faked: the real `awk-red` binary, the real engine, the real
+about the run is faked: the real `awk-e` binary, the real engine, the real
 example rules and a real fifo are all used.
 
 Inputs are opt-in (`--mqtt`, `--webhook`, `--tick`, `-i`), so every case
 names the ones it wants and only those. To keep a developer's `.env` out of
-that decision the suite pins `AWKRED_MQTT=0`, `AWKRED_TICK=0`,
-`AWKRED_HTTP_PORT=8080`, `AWKRED_WEBHOOK=0` and `AWKRED_TEST_STEP=0` before running anything.
+that decision the suite pins `AWKE_MQTT=0`, `AWKE_TICK=0`,
+`AWKE_HTTP_PORT=8080`, `AWKE_WEBHOOK=0` and `AWKE_TEST_STEP=0` before running anything.
 
 ## The fake subscriber
 
-`MOSQ_SUB=test/fake-mosquitto-sub ./awk-red ...`, with one of:
+`MOSQ_SUB=test/fake-mosquitto-sub ./awk-e ...`, with one of:
 
 | `FAKE_SUB_MODE` | Behaviour |
 | --- | --- |
@@ -60,7 +60,7 @@ Two of these deserve an explanation, because both were wrong the first time:
   reads a record, so a fake that prints and then blocks on *input* arrives
   immediately whether or not it is buffered. Blocking on a `getline` from a fifo
   is what exposes block buffering for real: the line only leaves the process
-  because `awk-red` wrapped the subscriber in `stdbuf -oL`.
+  because `awk-e` wrapped the subscriber in `stdbuf -oL`.
 * **`FAKE_SUB_PAYLOAD`** exists because a payload that triggers no rule looks
   exactly like a broken run. `message 1` sent to a temperature rule correctly
   publishes nothing, and the case then reports "no output".
@@ -72,10 +72,10 @@ gone.
 
 ## The fake publisher
 
-awk-red calls `mosquitto_pub` by name, so `bin/mosquitto_pub` is put first on
+awk-e calls `mosquitto_pub` by name, so `bin/mosquitto_pub` is put first on
 `PATH` for the publish cases. With `FAKE_PUB_MODE=fail` it prints mosquitto's
 own `Error: Connection refused` and exits 1, which is what lets a case check
-that awk-red attributes the failure to the broker and keeps the run going;
+that awk-e attributes the failure to the broker and keeps the run going;
 otherwise it prints nothing and exits 0.
 
 ## HTTP
@@ -101,14 +101,14 @@ python:
   `/inet/tcp/PORT/0/0` does nothing until the first `getline` - so a bare
   `BEGIN` that does that `getline` binds, listens and then blocks in `accept()`,
   which is exactly the hold we want. The same asymmetry drives the preflight in
-  `awk-red`: on a taken port `getline` returns immediately with
+  `awk-e`: on a taken port `getline` returns immediately with
   `ERRNO = "Address already in use"`, on a free one it blocks, and `timeout`
   tells them apart. The case waits for the listen to appear in `/proc/net/tcp`
   first - a probe that *connects* would consume the occupier's one `accept()`
-  and release the port - and runs awk-red under `timeout`, so anything other
+  and release the port - and runs awk-e under `timeout`, so anything other
   than a fast preflight failure shows up as an exit status instead of a stall.
 * **No hangs.** A foreground run goes through `timeout`, and a background run is
-  waited on with a bound (`finish_awkred`, `wait_awkred`), so a source that
+  waited on with a bound (`finish_awke`, `wait_awke`), so a source that
   outlives its input is reported - usually as exit 124 or "still running after
   5 s" - instead of stalling the suite.
 
@@ -122,7 +122,7 @@ mosquitto` in a test runner finds the runner.
 
 ## Signals
 
-`SIGTERM` is sent to a backgrounded `awk-red`. `SIGINT` is not: children of a
+`SIGTERM` is sent to a backgrounded `awk-e`. `SIGINT` is not: children of a
 non-interactive shell inherit it as ignored, so `kill -INT` on a background job
 does nothing and the case would pass for the wrong reason. Ctrl-C is tested with
 `timeout --signal=INT` in the foreground instead.

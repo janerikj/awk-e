@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# awk-red - a Node-RED style event router built on AWK.
+# awk-e - a Node-RED style event router built on AWK.
 #
 # This script is the application. It does everything gawk is bad at:
 #   * loads .env and exports the configuration
@@ -17,14 +17,14 @@
 #
 # gawk does what awk is good at: matching, transforming and dispatching.
 #
-#   usage: awk-red [--mqtt [-h host] [-p port]] [--webhook] [-P port]
+#   usage: awk-e [--mqtt [-h host] [-p port]] [--webhook] [-P port]
 #                 [--tick seconds] [-i file] [-t topic] [-r rules] [-e env]
 #                 [-n] [-l] [-v] [-q] [-?] [--version]
 #
 set -euo pipefail
 
-readonly PROG=awk-red
-readonly VERSION=v0.9.2
+readonly PROG=awk-e
+readonly VERSION=v1.0.0
 
 if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4) )); then
     printf '%s: bash 4.4 or newer is required (found %s)\n' "$PROG" "$BASH_VERSION" >&2
@@ -49,15 +49,15 @@ usage() {
 $PROG $VERSION - event router: inputs -> gawk -> rules
 
 inputs (at least one is required):
-      --mqtt          subscribe to the broker        (AWKRED_MQTT, default off)
-      --webhook       listen for HTTP webhooks       (AWKRED_WEBHOOK, default off)
+      --mqtt          subscribe to the broker        (AWKE_MQTT, default off)
+      --webhook       listen for HTTP webhooks       (AWKE_WEBHOOK, default off)
       --pipe CMD      run CMD and treat its stdout as a subscription
-                      (AWKRED_PIPE; --every SECONDS to poll)
+                      (AWKE_PIPE; --every SECONDS to poll)
   -i, --input FILE    read messages from FILE ('-' = stdin) instead of live inputs
-      --tick SECONDS  a clock message on awk-red/tick/<timestamp> every SECONDS
-                      (AWKRED_TICK, default 0 = off)
+      --tick SECONDS  a clock message on awk-e/tick/<timestamp> every SECONDS
+                      (AWKE_TICK, default 0 = off)
   -P, --http-port PORT  HTTP listen port when --webhook is on
-                      (AWKRED_HTTP_PORT, default 3737)
+                      (AWKE_HTTP_PORT, default 3737)
 
 broker (for --mqtt and for pub() in every mode):
   -h, --host HOST     broker hostname                (MQTT_HOST,   default localhost)
@@ -70,18 +70,18 @@ broker (for --mqtt and for pub() in every mode):
 options:
   -r, --rules DIR     rule directory, *.awk loaded in sorted order; required
                       unless --gateway (or --list-rules)
-                                                     (AWKRED_RULES, default none)
-  -e, --env FILE      env file to load           (AWKRED_ENV,  default ./.env)
+                                                     (AWKE_RULES, default none)
+  -e, --env FILE      env file to load           (AWKE_ENV,  default ./.env)
       --every SECONDS  with --pipe, rerun CMD every SECONDS (a poll; the
                       command's failures are retried)
       --changed        with --pipe, drop a topic's repeated payloads
   -n, --dry-run       print commands instead of running them (DRYRUN=1)
   -l, --list-rules    list the loaded rules and exit
-  -v, --verbose       log routing decisions to stderr (AWKRED_VERBOSE=1)
+  -v, --verbose       log routing decisions to stderr (AWKE_VERBOSE=1)
   -q, --quiet         only report errors
-      --first-match   stop after the first matching rule (AWKRED_FIRST_MATCH=1)
+      --first-match   stop after the first matching rule (AWKE_FIRST_MATCH=1)
       --gateway       republish messages no rule matched, to the publish broker
-                      (AWKRED_GATEWAY=1); rules are optional, but with --mqtt a
+                      (AWKE_GATEWAY=1); rules are optional, but with --mqtt a
                       separate MQTT_PUB_* broker is required
   -?, --help          show this help and exit
       --version       show version and exit
@@ -160,9 +160,9 @@ done
 CONFIG_VARS="MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS MQTT_TLS MQTT_CAFILE \
 MQTT_CLIENT_ID MQTT_TOPIC MQTT_PUB_HOST MQTT_PUB_PORT MQTT_PUB_USER \
 MQTT_PUB_PASS MQTT_PUB_TLS MQTT_PUB_CAFILE MQTT_PUB_CLIENT_ID \
-DRYRUN AWKRED_RULES AWKRED_FIRST_MATCH \
-AWKRED_VERBOSE AWKRED_TICK AWKRED_HTTP_PORT AWKRED_MQTT AWKRED_WEBHOOK AWKRED_TEST_STEP \
-AWKRED_CHAIN_MAX AWKRED_PIPE AWKRED_PIPE_EVERY AWKRED_PIPE_CHANGED AWKRED_GATEWAY"
+DRYRUN AWKE_RULES AWKE_FIRST_MATCH \
+AWKE_VERBOSE AWKE_TICK AWKE_HTTP_PORT AWKE_MQTT AWKE_WEBHOOK AWKE_TEST_STEP \
+AWKE_CHAIN_MAX AWKE_PIPE AWKE_PIPE_EVERY AWKE_PIPE_CHANGED AWKE_GATEWAY"
 
 declare -A PRESET=()
 for name in $CONFIG_VARS; do
@@ -178,15 +178,15 @@ load_env_file() {
     set +a
 }
 
-env_file=${OPT_ENV:-${AWKRED_ENV:-}}
+env_file=${OPT_ENV:-${AWKE_ENV:-}}
 if [[ -z $env_file && -r ./.env ]]; then
     env_file=./.env
 fi
 if [[ -n $env_file ]]; then
     load_env_file "$env_file"
     warn "loaded env file: $env_file"
-elif [[ -n ${AWKRED_ENV:-} ]]; then
-    die "env file not readable: $AWKRED_ENV"
+elif [[ -n ${AWKE_ENV:-} ]]; then
+    die "env file not readable: $AWKE_ENV"
 fi
 
 for name in "${!PRESET[@]}"; do
@@ -199,33 +199,33 @@ done
 MQTT_HOST=${OPT_HOST:-${MQTT_HOST:-localhost}}
 MQTT_PORT=${OPT_PORT:-${MQTT_PORT:-1883}}
 MQTT_TOPIC=${OPT_TOPIC:-${MQTT_TOPIC:-#}}
-RULES_DIR=${OPT_RULES:-${AWKRED_RULES:-}}
+RULES_DIR=${OPT_RULES:-${AWKE_RULES:-}}
 DRYRUN=${OPT_DRYRUN:-${DRYRUN:-0}}
-TICK=${OPT_TICK:-${AWKRED_TICK:-0}}
-HTTP_PORT=${OPT_HTTP_PORT:-${AWKRED_HTTP_PORT:-3737}}
-PIPE_CMD=${OPT_PIPE:-${AWKRED_PIPE:-}}
-PIPE_EVERY=${OPT_EVERY:-${AWKRED_PIPE_EVERY:-0}}
-PIPE_CHANGED=${OPT_CHANGED:-${AWKRED_PIPE_CHANGED:-0}}
+TICK=${OPT_TICK:-${AWKE_TICK:-0}}
+HTTP_PORT=${OPT_HTTP_PORT:-${AWKE_HTTP_PORT:-3737}}
+PIPE_CMD=${OPT_PIPE:-${AWKE_PIPE:-}}
+PIPE_EVERY=${OPT_EVERY:-${AWKE_PIPE_EVERY:-0}}
+PIPE_CHANGED=${OPT_CHANGED:-${AWKE_PIPE_CHANGED:-0}}
 case ${PIPE_CHANGED:-0} in
     1|true|yes|on) PIPE_CHANGED=1 ;;
     *)             PIPE_CHANGED=0 ;;
 esac
-# The subscription is opt-in: --mqtt or AWKRED_MQTT=1. HTTP webhooks: --webhook
-# or AWKRED_WEBHOOK=1. MQTT_HOST/MQTT_PORT are broker configuration for pub() as
+# The subscription is opt-in: --mqtt or AWKE_MQTT=1. HTTP webhooks: --webhook
+# or AWKE_WEBHOOK=1. MQTT_HOST/MQTT_PORT are broker configuration for pub() as
 # well, so setting them never switches the input on by itself.
 MQTT_ON=0
 WEBHOOK_ON=0
-if [[ -n $OPT_MQTT || ${AWKRED_MQTT:-0} =~ ^(1|true|yes|on)$ ]]; then
+if [[ -n $OPT_MQTT || ${AWKE_MQTT:-0} =~ ^(1|true|yes|on)$ ]]; then
     MQTT_ON=1
 fi
-if [[ -n $OPT_WEBHOOK || ${AWKRED_WEBHOOK:-0} =~ ^(1|true|yes|on)$ ]]; then
+if [[ -n $OPT_WEBHOOK || ${AWKE_WEBHOOK:-0} =~ ^(1|true|yes|on)$ ]]; then
     WEBHOOK_ON=1
 fi
 # Gateway mode: forward unmatched messages to the publish broker. Off by
 # default, because a router that republishes everything is a surprise unless it
 # was asked for.
 GATEWAY_ON=0
-if [[ -n $OPT_GATEWAY || ${AWKRED_GATEWAY:-0} =~ ^(1|true|yes|on)$ ]]; then
+if [[ -n $OPT_GATEWAY || ${AWKE_GATEWAY:-0} =~ ^(1|true|yes|on)$ ]]; then
     GATEWAY_ON=1
 fi
 
@@ -248,13 +248,13 @@ PUB_SEPARATE=0
 [[ $PUB_TLS == "${MQTT_TLS:-0}" ]] || PUB_SEPARATE=1
 [[ $PUB_CAFILE == "${MQTT_CAFILE:-}" ]] || PUB_SEPARATE=1
 export MQTT_HOST MQTT_PORT MQTT_TOPIC DRYRUN
-export AWKRED_RULES="$RULES_DIR"
-export AWKRED_PROG="$PROG"
-if [[ -n $OPT_VERBOSE ]]; then export AWKRED_VERBOSE=1; fi
-if [[ -n $OPT_QUIET ]]; then export AWKRED_QUIET=1; fi
-if [[ -n $OPT_FIRST_MATCH ]]; then export AWKRED_FIRST_MATCH=1; fi
-if [[ -n $OPT_LIST ]]; then export AWKRED_LIST=1; fi
-if (( GATEWAY_ON )); then export AWKRED_GATEWAY=1; fi
+export AWKE_RULES="$RULES_DIR"
+export AWKE_PROG="$PROG"
+if [[ -n $OPT_VERBOSE ]]; then export AWKE_VERBOSE=1; fi
+if [[ -n $OPT_QUIET ]]; then export AWKE_QUIET=1; fi
+if [[ -n $OPT_FIRST_MATCH ]]; then export AWKE_FIRST_MATCH=1; fi
+if [[ -n $OPT_LIST ]]; then export AWKE_LIST=1; fi
+if (( GATEWAY_ON )); then export AWKE_GATEWAY=1; fi
 
 # --------------------------------------------------------- dependencies
 
@@ -264,7 +264,7 @@ if [[ ! $TICK =~ ^[0-9]+$ ]]; then
     usage_error "--tick takes whole seconds, 0 to disable (got: $TICK)"
 fi
 if (( TICK > 0 )) && [[ -n $OPT_INPUT ]]; then
-    usage_error "--tick cannot be combined with --input; put an awk-red/tick line in the recording"
+    usage_error "--tick cannot be combined with --input; put an awk-e/tick line in the recording"
 fi
 
 if [[ ! $HTTP_PORT =~ ^[0-9]+$ ]] || (( HTTP_PORT < 1 || HTTP_PORT > 65535 )); then
@@ -326,11 +326,11 @@ fi
 GAWK=$(command -v gawk)
 gawk_version=$("$GAWK" --version 2>/dev/null | sed -n '1s/^GNU Awk \([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p')
 if [[ -z $gawk_version ]]; then
-    die "$GAWK is not GNU Awk, awk-red needs gawk (sudo apt install gawk)"
+    die "$GAWK is not GNU Awk, awk-e needs gawk (sudo apt install gawk)"
 fi
 read -r gawk_major gawk_minor <<<"$gawk_version"
 if (( gawk_major < 4 )); then
-    die "gawk $gawk_major.$gawk_minor is too old, awk-red needs gawk >= 4.0"
+    die "gawk $gawk_major.$gawk_minor is too old, awk-e needs gawk >= 4.0"
 fi
 
 [[ -r $ENGINE ]] || die "engine not readable: $ENGINE"
@@ -398,7 +398,7 @@ if (( WEBHOOK_ON )); then
         BEGIN {
             s = "/inet/tcp/" PORT "/0/0"
             if ((s |& getline l) < 0) {
-                printf "awk-red: cannot listen on port %d: %s\n", PORT, ERRNO > "/dev/stderr"
+                printf "awk-e: cannot listen on port %d: %s\n", PORT, ERRNO > "/dev/stderr"
                 exit 1
             }
         }
@@ -423,7 +423,7 @@ if [[ -z $OPT_QUIET ]]; then
         printf '  rules    (none)\n' >&2
     fi
     if (( TICK > 0 )); then
-        printf '  clock    every %d s, on topic awk-red/tick/<timestamp>\n' "$TICK" >&2
+        printf '  clock    every %d s, on topic awk-e/tick/<timestamp>\n' "$TICK" >&2
     fi
     if (( WEBHOOK_ON )); then
         printf '  http     port %d, on topic <method>/<path>\n' "$HTTP_PORT" >&2
@@ -461,7 +461,7 @@ fi
 # plain pipeline, so the writer is a process of its own that can be shut down
 # deterministically: when gawk dies, the writer is stopped instead of leaving a
 # subscription on the broker or a listener on a port behind.
-fifo=$(mktemp -u "${TMPDIR:-/tmp}/awk-red.XXXXXX") || die "mktemp failed"
+fifo=$(mktemp -u "${TMPDIR:-/tmp}/awk-e.XXXXXX") || die "mktemp failed"
 mkfifo "$fifo" || die "mkfifo failed: $fifo"
 
 writer_pid=""
@@ -515,7 +515,7 @@ http_loop() {
 # the whole stream, and nothing inside the process can fire while the broker is
 # silent - so the shell injects a message into the same fifo:
 #
-#     awk-red/tick/2026-10-03T11:22:33Z 1756899753
+#     awk-e/tick/2026-10-03T11:22:33Z 1756899753
 #
 # The topic carries the ISO-8601 timestamp and the payload the epoch seconds,
 # which is ready for arithmetic against systime(). A rule matching the topic is
@@ -534,7 +534,7 @@ tick_loop() {
             wait "$sleeper" 2>/dev/null || true
         done
         read -r stamp <<<"$(date -u +%Y-%m-%dT%H:%M:%SZ' '%s)"
-        printf 'awk-red/tick/%s %s\n' "${stamp%% *}" "${stamp##* }"
+        printf 'awk-e/tick/%s %s\n' "${stamp%% *}" "${stamp##* }"
     done
 }
 
@@ -568,7 +568,7 @@ pipe_loop() {
     # A private fifo so the command's pid stays trackable while its output is
     # read in this shell: a plain "cmd | filter" pipeline would leave the
     # command behind on shutdown, because killing $! only reaches the filter.
-    PIPE_FIFO=$(mktemp -u "${TMPDIR:-/tmp}/awk-red.pipe.XXXXXX") || return 1
+    PIPE_FIFO=$(mktemp -u "${TMPDIR:-/tmp}/awk-e.pipe.XXXXXX") || return 1
     mkfifo "$PIPE_FIFO" || { rm -f "$PIPE_FIFO"; return 1; }
 
     while :; do
@@ -612,7 +612,7 @@ if (( MQTT_ON )); then
 fi
 
 # The writer. Everything that writes to the fifo lives in here, which is one
-# process instead of several children of awk-red:
+# process instead of several children of awk-e:
 #
 #   write_loop (subshell, owns the fifo)
 #     |- mosquitto_sub   the subscription, when --mqtt is on
@@ -714,7 +714,7 @@ writer_pid=$!
 stdbuf -oL "$GAWK" "${GAWK_OPTS[@]}" < "$fifo" &
 engine_pid=$!
 
-# The engine is the process whose status awk-red reports, because the engine is
+# The engine is the process whose status awk-e reports, because the engine is
 # where the work happens. The writer's status is what says why: when an input
 # ended first, the engine did nothing wrong and only saw end of input. So a
 # refused login arrives as mosquitto_sub's own exit 5 - write_loop has already
@@ -728,7 +728,7 @@ wait "$engine_pid" || status=$?
 # end of input), this kill is a no-op and its status is reaped unchanged. The
 # other order is a broken rule or a crash in the engine - without this line the
 # subscription or the clock kept running with nothing reading the fifo, and
-# awk-red hung for ever.
+# awk-e hung for ever.
 kill -TERM "$writer_pid" 2>/dev/null
 wait "$writer_pid" || writer_status=$?
 set -e

@@ -1,9 +1,6 @@
-# awk-red ![Version](https://img.shields.io/badge/version-v0.9.2-red)
+# awk-e ![Version](https://img.shields.io/badge/version-v1.0.0-red)
 
-> awk-red is to MQTT what AWK is to text files
-
-> [!WARNING]
-> v0: The interface is subject to change!
+> awk-e is to MQTT what AWK is to text files
 
 A Node-RED style event router built on a small AWK engine, with MQTT, HTTP, a
 clock or a command's stdout as the inputs.
@@ -18,7 +15,7 @@ Node-RED is built on a handful of simple ideas:
 
 AWK's `pattern { action }` model covers exactly those steps: pattern matching
 filters, the action body transforms and decides, and `system()` calls out to
-other programs. awk-red is that idea implemented as two files - a shell script
+other programs. awk-e is that idea implemented as two files - a shell script
 that handles what AWK is bad at, and a small AWK engine that routes.
 
 Messages are routed by rules - a rule is a small AWK file that reacts to a topic.
@@ -65,26 +62,26 @@ a rule directory, and nothing else.
 | `stdbuf`, `timeout` | line buffering and the HTTP preflight (coreutils) | usually already installed |
 | `jq` | only for `json()` payload extraction | `sudo apt install jq` |
 
-`mawk` is the default `awk` on Raspberry Pi OS and is **not** supported: awk-red
+`mawk` is the default `awk` on Raspberry Pi OS and is **not** supported: awk-e
 calls `gawk` explicitly.
 
 ## Quick start
 
 ```shell
-git clone <this repo> && cd awk-red
+git clone <this repo> && cd awk-e
 cp .env.example .env                      # set MQTT_HOST if you use a broker
-./awk-red -n -r examples -i examples/messages.log  # dry run, bundled rules
-./awk-red -l -r examples                  # what handles what
-./awk-red -n -r examples --tick 1         # the clock alone, no broker needed
-./awk-red -r ./rules --mqtt -h mqtt.local # live, with your own rules
+./awk-e -n -r examples -i examples/messages.log  # dry run, bundled rules
+./awk-e -l -r examples                  # what handles what
+./awk-e -n -r examples --tick 1         # the clock alone, no broker needed
+./awk-e -r ./rules --mqtt -h mqtt.local # live, with your own rules
 ```
 
-There is no default rule directory: use `-r` (or `AWKRED_RULES`). To watch the bundled 
+There is no default rule directory: use `-r` (or `AWKE_RULES`). To watch the bundled
 examples against a real broker:
 
 ```shell
 # terminal 1
-./awk-red -n -v -r examples --mqtt
+./awk-e -n -v -r examples --mqtt
 # terminal 2
 mosquitto_pub -t home/kitchen/temp -m 33.5      # -> DRYRUN> ... alarm/temp/kitchen
 mosquitto_pub -t home/door -m open
@@ -95,7 +92,7 @@ To bridge with no rules at all, use gateway mode (see *Gateway mode*).
 ## Layout
 
 ```
-awk-red              the application: .env, flags, dependencies, rule discovery,
+awk-e              the application: .env, flags, dependencies, rule discovery,
                      line buffering, process supervision
 lib/router.awk       the engine: dispatch table (regex and MQTT filters), side
                      effects, JSON extraction, smoothing, rate limits, change
@@ -109,9 +106,9 @@ docs/design.md       why it is built this way, and what was tried instead
 examples and your own rules the same thing:
 
 ```shell
-./awk-red -r examples            # the bundled examples
-./awk-red -r ./rules             # a directory next to the script
-./awk-red -r /etc/awk-red/rules  # a system-wide set of rules
+./awk-e -r examples            # the bundled examples
+./awk-e -r ./rules             # a directory next to the script
+./awk-e -r /etc/awk-e/rules  # a system-wide set of rules
 ```
 
 ## Configuration
@@ -123,39 +120,39 @@ never committed.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `AWKRED_MQTT` | `0` | `1` subscribes to the broker (`--mqtt`) |
+| `AWKE_MQTT` | `0` | `1` subscribes to the broker (`--mqtt`) |
 | `MQTT_HOST` | `localhost` | broker hostname (`-h`) |
 | `MQTT_PORT` | `1883` | broker port (`-p`) |
 | `MQTT_USER` / `MQTT_PASS` | empty | broker credentials, sent as `-u`/`-P` |
 | `MQTT_TLS` | `0` | `1` enables TLS on both the subscription and `pub()` |
 | `MQTT_CAFILE` | system CA bundle | CA bundle used when TLS is on |
-| `MQTT_CLIENT_ID` | `awk-red` | client id, for correct re-connects |
+| `MQTT_CLIENT_ID` | `awk-e` | client id, for correct re-connects |
 | `MQTT_TOPIC` | `#` | subscription filter (`-t`) |
 | `MQTT_PUB_HOST` / `MQTT_PUB_PORT` | `MQTT_HOST` / `MQTT_PORT` | publish broker, for bridging |
 | `MQTT_PUB_USER` / `MQTT_PUB_PASS` | `MQTT_USER` / `MQTT_PASS` | publish credentials |
 | `MQTT_PUB_TLS` / `MQTT_PUB_CAFILE` | `MQTT_TLS` / `MQTT_CAFILE` | publish TLS settings |
 | `MQTT_PUB_CLIENT_ID` | `MQTT_CLIENT_ID` | publish client id |
 | `DRYRUN` | `0` | `1` prints commands instead of running them |
-| `AWKRED_RULES` | none | rule directory (`-r`); no default, no rules if unset |
-| `AWKRED_FIRST_MATCH` | `0` | stop after the first matching rule |
-| `AWKRED_GATEWAY` | `0` | `1` republishes unmatched messages (`--gateway`) |
-| `AWKRED_VERBOSE` | `0` | log routing decisions |
-| `AWKRED_CHAIN_MAX` | `32` | maximum `chain()` hops before an event is dropped |
-| `AWKRED_TICK` | `0` | clock interval in seconds, `0` is off (`--tick`) |
-| `AWKRED_WEBHOOK` | `0` | `1` listens for HTTP webhooks (`--webhook`) |
-| `AWKRED_HTTP_PORT` | `3737` | HTTP listen port when webhooks are on (`-P`) |
-| `AWKRED_ENV` | `./.env` if present | env file to load (`-e`) |
+| `AWKE_RULES` | none | rule directory (`-r`); no default, no rules if unset |
+| `AWKE_FIRST_MATCH` | `0` | stop after the first matching rule |
+| `AWKE_GATEWAY` | `0` | `1` republishes unmatched messages (`--gateway`) |
+| `AWKE_VERBOSE` | `0` | log routing decisions |
+| `AWKE_CHAIN_MAX` | `32` | maximum `chain()` hops before an event is dropped |
+| `AWKE_TICK` | `0` | clock interval in seconds, `0` is off (`--tick`) |
+| `AWKE_WEBHOOK` | `0` | `1` listens for HTTP webhooks (`--webhook`) |
+| `AWKE_HTTP_PORT` | `3737` | HTTP listen port when webhooks are on (`-P`) |
+| `AWKE_ENV` | `./.env` if present | env file to load (`-e`) |
 
 > [!NOTE]
 > **Precedence:** command line > environment > `.env` > built-in default.
 
 The `MQTT_*` variables configure the broker connection for `--mqtt` and for
 `pub()` in every mode, but setting them never switches the subscription on:
-that is `--mqtt` or `AWKRED_MQTT=1`. A run without any input is a usage error.
+that is `--mqtt` or `AWKE_MQTT=1`. A run without any input is a usage error.
 
 `pub()` and `pub_retained()` can publish to a broker of their own: set any
 `MQTT_PUB_*` variable and it overrides the matching `MQTT_*` value for
-publishes only, leaving the subscription untouched. That is what makes awk-red
+publishes only, leaving the subscription untouched. That is what makes awk-e
 a bridge between two brokers. Unset `MQTT_PUB_*` values fall back to their
 `MQTT_*` counterpart, so existing setups are unchanged.
 
@@ -177,13 +174,13 @@ Live mode executes actions. Use `--dry-run` whenever you are not sure.
 -e, --env FILE      env file to load
 -i, --input FILE    read messages from FILE ('-' = stdin) instead of live inputs
     --mqtt          subscribe to the broker (-h/-p above configure it)
-    --webhook       serve HTTP webhooks (port set by -P or AWKRED_HTTP_PORT)
+    --webhook       serve HTTP webhooks (port set by -P or AWKE_HTTP_PORT)
     --pipe CMD      run CMD and treat its stdout as a subscription, one
-                     "topic payload" line per message (AWKRED_PIPE)
+                     "topic payload" line per message (AWKE_PIPE)
     --every SECONDS with --pipe, rerun CMD every SECONDS (a poll; a failed
                      run is retried)
     --changed       with --pipe, drop a topic's repeated payloads
-    --tick SECONDS  clock message on awk-red/tick/<timestamp> every SECONDS
+    --tick SECONDS  clock message on awk-e/tick/<timestamp> every SECONDS
 -P, --http-port PORT   HTTP listen port when --webhook is on (default 3737)
 -n, --dry-run       print commands instead of running them
 -l, --list-rules    list the loaded rules and exit
@@ -263,7 +260,7 @@ Every side effect goes through `emit()`, so `--dry-run` covers the whole
 system: commands are printed, not executed.
 
 ```shell
-./awk-red -n -r examples -i examples/messages.log
+./awk-e -n -r examples -i examples/messages.log
 ```
 
 ```plain
@@ -392,7 +389,7 @@ Three things to know:
   filter on the chained topic runs on the payload the rule queued. Send the
   format that topic expects.
 * **A chain that matches itself is cut off.** The guard is a hop count,
-  `AWKRED_CHAIN_MAX` (default 32); an event past it is dropped with a warning.
+  `AWKE_CHAIN_MAX` (default 32); an event past it is dropped with a warning.
   Without it a self-matching chain would spin forever - the same feedback loop
   `pub()` has, but with no broker round-trip to slow it down.
 
@@ -552,7 +549,7 @@ command and should never reach the engine at all.
 
 ## Gateway mode
 
-`--gateway` (or `AWKRED_GATEWAY=1`) turns awk-red into a transparent bridge:
+`--gateway` (or `AWKE_GATEWAY=1`) turns awk-e into a transparent bridge:
 when no rule matches an input message, the engine republishes it unchanged to
 the publish broker with `pub(topic, payload)`. With rules, an unmatched message
 is forwarded and a matched one is owned by its rule; with an empty rule set,
@@ -560,17 +557,17 @@ every message is forwarded, which is the "no rules at all" gateway.
 
 ```shell
 # forward everything that arrives on in.example to out.example, no rules
-MQTT_PUB_HOST=out.example ./awk-red --gateway --mqtt -h in.example
+MQTT_PUB_HOST=out.example ./awk-e --gateway --mqtt -h in.example
 ```
 
 * **A separate publish broker is required with `--mqtt`.** Forwarding an
   unmatched message back to the broker it arrived from is a feedback loop for
-  every unmatched topic, so awk-red refuses `--gateway --mqtt` unless the
+  every unmatched topic, so awk-e refuses `--gateway --mqtt` unless the
   publish broker differs from the subscription broker (any `MQTT_PUB_*` set to
   a different value). Set `MQTT_PUB_HOST`/`MQTT_PUB_PORT` (or a different
   user/pass/TLS) to make it a real bridge.
 * **An empty rule set is allowed only here.** A rule-less run with no gateway
-  would just discard the stream, so awk-red refuses it; `--gateway` is what
+  would just discard the stream, so awk-e refuses it; `--gateway` is what
   makes "no rules" a purposeful run - every unmatched message is forwarded, and
   with no rules at all that is everything. Explicit rules still match,
   transform, filter, `pub()`, `emit()` or `chain()` as usual - gateway only
@@ -580,14 +577,14 @@ MQTT_PUB_HOST=out.example ./awk-red --gateway --mqtt -h in.example
   forwarded like an input message, through the same
   `json()`/`smooth()`/`limit()`/`changed()` pipeline.
 * **A failed forward is logged, not fatal.** If the publish broker cannot be
-  reached, `mosquitto_pub`'s reason is followed by an `awk-red: error: publish
+  reached, `mosquitto_pub`'s reason is followed by an `awk-e: error: publish
   to HOST:PORT failed ...` line and the run carries on (see *Troubleshooting*).
 
 ## HTTP webhooks
 
 HTTP is another input a rule can react to, off unless asked for:
-`--webhook` (optionally with `-P PORT` or `AWKRED_HTTP_PORT`). It can be the
-whole input: `./awk-red -n --webhook` needs no subscription at all (`pub()` in a
+`--webhook` (optionally with `-P PORT` or `AWKE_HTTP_PORT`). It can be the
+whole input: `./awk-e -n --webhook` needs no subscription at all (`pub()` in a
 rule still sends to the configured broker; use `-P` to pick a different port).
 The listener binds all interfaces (there is no host option), so treat it like
 any other port you expose and firewall it accordingly.
@@ -627,7 +624,7 @@ POST /sensor   {"t":21}        ->  post/sensor {"t":21}
 * One request per connection. It is answered `200 OK` or `400 Bad Request` and
   the connection is closed.
 
-awk-red checks the port before it starts anything, so a webhook port that is
+awk-e checks the port before it starts anything, so a webhook port that is
 already taken fails immediately with a clear message rather than starting a
 run that can never answer.
 
@@ -681,7 +678,7 @@ buffers 4-8 KB at a time, while the same process on a terminal writes line by
 line. Manual testing then always looks fine while pipes and systemd stand
 still.
 
-awk-red line-buffers both stages with `stdbuf -oL`, passes `--unbuffered` to
+awk-e line-buffers both stages with `stdbuf -oL`, passes `--unbuffered` to
 its jq coprocesses, and the engine calls `fflush()` after every message. To find
 which stage is buffering:
 
@@ -700,10 +697,10 @@ what `stdbuf -oL` does.
 reproducible:
 
 ```shell
-./awk-red -n -v -r examples -i examples/messages.log   # what would happen
-./awk-red -v -r examples -i examples/messages.log      # what does happen
+./awk-e -n -v -r examples -i examples/messages.log   # what would happen
+./awk-e -v -r examples -i examples/messages.log      # what does happen
 mosquitto_sub -v -t '#' | tee recording.log            # record a real stream
-./awk-red -n -r ~/rules -i recording.log               # replay against rules
+./awk-e -n -r ~/rules -i recording.log               # replay against rules
 ```
 
 A recording is one `topic payload` line per message - the format every input
@@ -717,13 +714,13 @@ Rules normally react to incoming messages, so they cannot fire while every
 input is quiet. `--tick SECONDS` adds a clock for that case:
 
 ```shell
-./awk-red --tick 300 -r ~/rules       # every five minutes
+./awk-e --tick 300 -r ~/rules       # every five minutes
 ```
 
 The script then publishes
 
 ```
-awk-red/tick/2026-10-03T11:22:33Z 1756899753
+awk-e/tick/2026-10-03T11:22:33Z 1756899753
 ```
 
 on the same input stream as everything else: topic, ISO-8601 UTC timestamp,
@@ -736,7 +733,7 @@ The clock lives in the shell, not in AWK, so two things are worth knowing:
 
 * `--tick` is a complete run on its own: no subscription, no listener and no
   port are needed for the clock to run
-* never publish to `^awk-red/tick/` from a rule. With the default subscription
+* never publish to `^awk-e/tick/` from a rule. With the default subscription
   the router receives its own messages back, so such a rule re-triggers itself
   once per interval, forever. Publishing elsewhere, as `heartbeat.awk` does,
   closes the loop exactly once
@@ -745,34 +742,34 @@ The clock lives in the shell, not in AWK, so two things are worth knowing:
 so put the line in the file instead.
 
 ```shell
-echo 'awk-red/tick/2026-10-03T11:22:33Z 1756899753' | ./awk-red -n -q -r examples -i -
+echo 'awk-e/tick/2026-10-03T11:22:33Z 1756899753' | ./awk-e -n -q -r examples -i -
 ```
 
 ## Running as a service
 
-`examples/awk-red.service` is a systemd unit. The points that matter:
+`examples/awk-e.service` is a systemd unit. The points that matter:
 
 * use `Restart=always` and `RestartSec=5`
-* pass `-r /etc/awk-red/rules` explicitly: there is no default rule directory
+* pass `-r /etc/awk-e/rules` explicitly: there is no default rule directory
 * keep `-v` out of it and use `-q`, so the journal holds errors instead of one
   line per message
 * `Type=simple`, since the script runs in the foreground
 * enable only the inputs the rules need, each asked for on its own: `--mqtt`
-  (or `AWKRED_MQTT=1`) to react to the broker, `--webhook` for webhooks,
+  (or `AWKE_MQTT=1`) to react to the broker, `--webhook` for webhooks,
   `--tick` for scheduled work. A clock nobody asked for stays off, so an
   installation with no scheduled work behaves exactly like the examples
 
 ```shell
-sudo install -m755 awk-red /usr/local/bin/awk-red
-sudo install -d /etc/awk-red/rules
-sudo cp examples/*.awk /etc/awk-red/rules/
-sudo install -m644 .env /etc/awk-red/.env
-sudo cp examples/awk-red.service /etc/systemd/system/
-sudo systemctl enable --now awk-red
+sudo install -m755 awk-e /usr/local/bin/awk-e
+sudo install -d /etc/awk-e/rules
+sudo cp examples/*.awk /etc/awk-e/rules/
+sudo install -m644 .env /etc/awk-e/.env
+sudo cp examples/awk-e.service /etc/systemd/system/
+sudo systemctl enable --now awk-e
 ```
 
-Keep credentials in `/etc/awk-red/.env` with mode `600`, and pass the file
-with `-e /etc/awk-red/.env`. Do not commit it.
+Keep credentials in `/etc/awk-e/.env` with mode `600`, and pass the file
+with `-e /etc/awk-e/.env`. Do not commit it.
 
 ## Troubleshooting
 
@@ -788,8 +785,8 @@ as a usage error, so a forgotten `-r` fails loudly. Pass `-r DIR`, or
 **No output at all.** Check the input and the rules. For an MQTT input:
 
 ```shell
-./awk-red -l -r examples          # are any rules loaded?
-./awk-red -v -r examples --mqtt -t 'home/#'   # does anything match the filter?
+./awk-e -l -r examples          # are any rules loaded?
+./awk-e -v -r examples --mqtt -t 'home/#'   # does anything match the filter?
 mosquitto_sub -v -t 'home/#'      # is anything published at all?
 ```
 
@@ -803,20 +800,20 @@ logged with `-v` - or you are running with `--dry-run`, in which case the
 `DRYRUN>` lines are the expected output.
 
 **A publish fails.** Under `--gateway` a broker that is down fails on every
-forwarded message, so awk-red adds a line naming the broker and the action, after
+forwarded message, so awk-e adds a line naming the broker and the action, after
 `mosquitto_pub`'s own reason:
 
 ```plain
 Error: Connection refused
-awk-red: error: publish to localhost:1883 failed: mosquitto_pub exited with status 1 (is the broker running?)
+awk-e: error: publish to localhost:1883 failed: mosquitto_pub exited with status 1 (is the broker running?)
 ```
 
 The run keeps going: a broker that is temporarily unreachable must not end the
 stream. `pub()` still returns the exit status, so a rule can react to it.
 
-**A rule throws a gawk error.** awk-red stops; that is deliberate, a broken
+**A rule throws a gawk error.** awk-e stops; that is deliberate, a broken
 rule should not silently swallow the stream. Run it against a recording to
-reproduce: `./awk-red -n -r examples -i examples/messages.log`.
+reproduce: `./awk-e -n -r examples -i examples/messages.log`.
 
 **Webhooks answer on `localhost` but not from another host.** On WSL2 they
 never do: the distro sits behind a NAT, its `172.x` address is unreachable from
@@ -851,7 +848,7 @@ does, the alternatives that were rejected, and what is worth building next.
   handler stalls every other rule. Scheduled work comes from `--tick` instead.
 * A tick is one message per interval, not a general timer wheel: there is one
   interval, and it is the same for every rule.
-* `chain()` is depth-limited (`AWKRED_CHAIN_MAX`, default 32) and cannot
+* `chain()` is depth-limited (`AWKE_CHAIN_MAX`, default 32) and cannot
   branch-and-merge: a chained event runs through the normal pipeline once, like
   any other message.
 * HTTP webhooks answer one connection at a time (see *HTTP webhooks*); a

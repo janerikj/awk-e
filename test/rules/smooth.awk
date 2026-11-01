@@ -9,7 +9,7 @@ BEGIN {
     json("smooth/json", ".temperature")
 
     # The ordering proof: throttle/ is both smoothed and limited. With a 60 s
-    # window and AWKRED_TEST_STEP=40 the second message lands inside the
+    # window and AWKE_TEST_STEP=40 the second message lands inside the
     # window and the third outside it, so a case can watch the average move on
     # a message the limiter drops - without sleeping.
     smooth("throttle/#", 0.5)

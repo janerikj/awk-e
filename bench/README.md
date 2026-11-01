@@ -1,6 +1,6 @@
 # Benchmarks
 
-`bench/run.sh` compares awk-red's capacity with a raw MQTT round trip on the
+`bench/run.sh` compares awk-e's capacity with a raw MQTT round trip on the
 same broker. It is deliberately separate from `test/`: this needs a real broker
 (ideally on another host) and a real network, so it is not part of the no-network
 suite.
@@ -15,7 +15,7 @@ Options: `-h/--host` (default `mqtt.example.invalid`; pass `-h` or set
 `MQTT_HOST`), `-p/--port` (1883), `-u/--user`,
 `-P/--pass`, `-n/--count "N N"`, `-r/--repeats`, `-q/--qos`, `--nodelay`,
 `--sleep` (subscription settle time, default 0.8 s). Configuration follows
-awk-red's precedence: command line > environment > `.env` > default, and any
+awk-e's precedence: command line > environment > `.env` > default, and any
 `MQTT_*` exported in the environment wins over `.env`.
 
 ## What is measured
@@ -27,18 +27,18 @@ the first to the last message of a run, at the clock of the stage that sees it:
 | --- | --- | --- |
 | `broker` | `mosquitto_pub -l` -> broker -> `mosquitto_sub -C N` | `mosquitto_sub -F '%U'` (epoch, ns) |
 | `subscriber` | same feed -> broker -> `mosquitto_sub` -> fifo -> engine | benchmark rule `date +%s.%N` on #1 and #N |
-| `engine` | `awk-red -i recording.log`, no broker | benchmark rule, as above |
-| `publisher` | `awk-red -i`, a rule `pub()`ing each message -> broker -> monitor | `mosquitto_sub -F '%U'` |
+| `engine` | `awk-e -i recording.log`, no broker | benchmark rule, as above |
+| `publisher` | `awk-e -i`, a rule `pub()`ing each message -> broker -> monitor | `mosquitto_sub -F '%U'` |
 
 `span_s` is the median over the repeats, `best_s` the fastest run (the one
 without a connection stall, see below). `ms/msg` and `msg/s` come from the
-median. Two deltas are printed: **subscriber - broker** is what awk-red's MQTT
+median. Two deltas are printed: **subscriber - broker** is what awk-e's MQTT
 input path costs on top of a plain subscription, and **publisher - engine** is
 what one `mosquitto_pub` process and connection per message costs on top of the
 engine.
 
 The engine cannot clock itself: gawk's `systime()` is whole seconds, so the two
-awk-red stages use a benchmark rule (`rules/sub/count.awk`) that shells out
+awk-e stages use a benchmark rule (`rules/sub/count.awk`) that shells out
 `date +%s.%N` twice, on message #1 and #N, and exits so the `--mqtt` run ends.
 The fork cost is symmetric, so it largely cancels in the span. `%U`'s
 nanosecond epoch does the same job for the two native-mosquitto stages.
@@ -54,7 +54,7 @@ nanosecond epoch does the same job for the two native-mosquitto stages.
   and MQTT session. The `broker` and `subscriber` stages use `mosquitto_pub -l`
   (one connection for the whole batch), so the comparison is deliberately
   between a batched feed and a per-message publish. This is the shape of
-  awk-red's `pub()`, not an artefact of the benchmark.
+  awk-e's `pub()`, not an artefact of the benchmark.
 * **Connection churn can add a ~1 s stall.** Rapid short-lived connections to
   the broker sometimes lose a packet and wait out the TCP RTO (Linux minimum
   1 s). It shows up as one large gap in a run, roughly 2-3 runs in 6 here, and

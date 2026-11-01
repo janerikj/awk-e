@@ -20,5 +20,5 @@ function door_handler(topic, payload,    state) {
     pub_retained("home/door/state", state)
 
     # emit() runs any command; here the system logger.
-    emit("logger -t awk-red -p daemon.info 'door is now " state "'")
+    emit("logger -t awk-e -p daemon.info 'door is now " state "'")
 }

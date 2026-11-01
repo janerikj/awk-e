@@ -1,7 +1,7 @@
-# lib/http.awk - HTTP request listener for awk-red
+# lib/http.awk - HTTP request listener for awk-e
 #
 # Listens on /inet/tcp/PORT/0/0 (all interfaces), transforms incoming HTTP
-# requests into MQTT-style "topic payload" lines on stdout (the awk-red fifo),
+# requests into MQTT-style "topic payload" lines on stdout (the awk-e fifo),
 # and sends a small HTTP response back to the client. One request per connection.
 #
 # Contract (minimal, as agreed):
@@ -77,7 +77,7 @@ function urldecode(str,    s, hex, i, c, n) {
 
 BEGIN {
     if (!PORT || PORT + 0 <= 0) {
-        print "awk-red: lib/http.awk requires -v PORT=<port>" > "/dev/stderr"
+        print "awk-e: lib/http.awk requires -v PORT=<port>" > "/dev/stderr"
         exit 1
     }
 
@@ -89,7 +89,7 @@ BEGIN {
         res = (service |& getline req)
         if (res <= 0) {
             if (ERRNO ~ /already in use/) {
-                printf "awk-red: cannot listen on port %d: %s\n", PORT, ERRNO > "/dev/stderr"
+                printf "awk-e: cannot listen on port %d: %s\n", PORT, ERRNO > "/dev/stderr"
                 exit 1
             }
             close(service)

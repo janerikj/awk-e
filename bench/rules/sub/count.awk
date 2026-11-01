@@ -10,9 +10,9 @@
 # Names avoid the engine's globals (N is the rule count, MSGS the message
 # count): a benchmark rule shares the gawk program with router.awk.
 BEGIN {
-    IN    = getenv("BENCH_IN", "awk-red-bench/in")
+    IN    = getenv("BENCH_IN", "awk-e-bench/in")
     TOTAL = getenv("BENCH_N", "100") + 0
-    MARK  = getenv("BENCH_MARKER", "/tmp/awk-red-bench")
+    MARK  = getenv("BENCH_MARKER", "/tmp/awk-e-bench")
     SEEN  = 0
     reg(IN, "bench_count", "benchmark message counter")
 }

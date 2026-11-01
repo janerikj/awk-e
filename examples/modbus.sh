@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# examples/modbus.sh - Modbus/TCP -> awk-red recipe.
+# examples/modbus.sh - Modbus/TCP -> awk-e recipe.
 #
 # Reads a register map and, for each row, runs one mbpoll read, then prints the
-# values as awk-red "topic payload" lines. mbpoll reads one register type per
+# values as awk-e "topic payload" lines. mbpoll reads one register type per
 # invocation (each type is a different Modbus function code), so the map's type
 # column decides the -t argument and rows of different types are simply separate
 # invocations - Modbus has no single request that spans them.
 #
 #   usage: modbus.sh [-?|--help] HOST [MAP]
 #
-# mbpoll is not a dependency of awk-red, only of this recipe:
+# mbpoll is not a dependency of awk-e, only of this recipe:
 #     sudo apt install mbpoll          # or build github.com/epsilonrt/mbpoll
 #
 # Run it as a poll, and let --changed turn a re-read value into an event:
-#     awk-red --pipe './examples/modbus.sh 10.0.0.5' --every 5 --changed
+#     awk-e --pipe './examples/modbus.sh 10.0.0.5' --every 5 --changed
 #
 # Map columns (whitespace separated, '#' comments):
 #
@@ -33,14 +33,14 @@ here=$(dirname -- "${BASH_SOURCE[0]}")
 
 usage() {
     cat <<EOF
-modbus.sh - Modbus/TCP -> awk-red recipe
+modbus.sh - Modbus/TCP -> awk-e recipe
 
 usage: modbus.sh [-?|--help] HOST [MAP]
 
-Runs one mbpoll read per map row and prints the values as awk-red
+Runs one mbpoll read per map row and prints the values as awk-e
 "topic payload" lines, ready for a poll:
 
-    awk-red --pipe './examples/modbus.sh HOST' --every 5 --changed
+    awk-e --pipe './examples/modbus.sh HOST' --every 5 --changed
 
 HOST   Modbus/TCP device (or MODBUS_HOST)
 MAP    register map (or MODBUS_MAP), default $here/modbus.map
@@ -49,7 +49,7 @@ MAP    register map (or MODBUS_MAP), default $here/modbus.map
        fmt:  - | int16 | hex | string | int | float
 
 MODBUS_PORT  TCP port (default 502)
-MBPOLL       mbpoll binary to run, not an awk-red dependency
+MBPOLL       mbpoll binary to run, not an awk-e dependency
 
   -?, --help   show this help and exit
 EOF
