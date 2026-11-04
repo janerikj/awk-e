@@ -92,7 +92,7 @@ To bridge with no rules at all, use gateway mode (see *Gateway mode*).
 ## Layout
 
 ```
-awk-e              the application: .env, flags, dependencies, rule discovery,
+awk-e                the application: .env, flags, dependencies, rule discovery,
                      line buffering, process supervision
 lib/router.awk       the engine: dispatch table (regex and MQTT filters), side
                      effects, JSON extraction, smoothing, rate limits, change
@@ -108,7 +108,7 @@ examples and your own rules the same thing:
 ```shell
 ./awk-e -r examples            # the bundled examples
 ./awk-e -r ./rules             # a directory next to the script
-./awk-e -r /etc/awk-e/rules  # a system-wide set of rules
+./awk-e -r /etc/awk-e/rules    # a system-wide set of rules
 ```
 
 ## Configuration
