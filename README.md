@@ -32,7 +32,7 @@ flowchart TD
         WEBHOOK["<b>--webhook</b><br/><i>HTTP clients</i>"]
         PIPE["<b>--pipe</b> CMD<br/><i>any command's stdout</i>"]
         TICK["<b>--tick</b> SECONDS<br/><i>the clock</i>"]
-        FILE["<b>-i</b> FILE<br/><i>a recording</i>"]
+        FILE["<b>--input</b> FILE<br/><i>a recording</i>"]
     end
 
     MQTT & WEBHOOK & PIPE & TICK & FILE --> FORMAT["<i>One line per message:</i><br/>'topic payload'"]
