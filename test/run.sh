@@ -362,6 +362,22 @@ case_stream_routes() {
     pass "$CASE"
 }
 
+# mosquitto_sub -v prints "topic (null)" for a zero-length payload, which looks
+# like the literal string "(null)" to a rule. The subscriber is asked for -F
+# output instead, so an empty payload stays empty. The fake subscriber follows
+# the same split: -F prints a bare topic line, -v prints "(null)".
+case_mqtt_empty_payload() {
+    CASE="a zero-length MQTT payload reaches a rule as an empty string"
+    FAKE_SUB_MODE=stream FAKE_SUB_COUNT=1 FAKE_SUB_TOPIC=mqtt/room/temp \
+        FAKE_SUB_EMPTY=1 \
+        timeout 3 "$AWKE" -n -q -r test/rules --mqtt -h test.invalid >"$OUT" 2>"$ERR"
+    grep -qF "DRYRUN> echo plus 'mqtt/room/temp='" "$OUT" \
+        || bad "empty payload was not empty: $(cat "$OUT")"
+    grep -qF "(null)" "$OUT" && bad "empty payload reached the rule as (null)"
+    assert_no_strays
+    pass "$CASE"
+}
+
 case_validation() {
     CASE="bad clock values are usage errors"
     local rc
@@ -1268,6 +1284,7 @@ cases=(
     case_signal_without_tick
     case_buffering
     case_stream_routes
+    case_mqtt_empty_payload
     case_validation
     case_no_input
     case_help_and_version

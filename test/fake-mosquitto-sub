@@ -25,7 +25,11 @@
 #   FAKE_SUB_GAP      default 0.4 seconds
 #   FAKE_SUB_TOPIC    default home/kitchen/temp
 #   FAKE_SUB_PAYLOAD  default "message N"; set it to anything a rule reacts to
+#   FAKE_SUB_EMPTY    default 0; 1 sends a zero-length payload
 #   FAKE_SUB_CODE     default 1
+#
+# Like the real client, -F prints the payload as it is (an empty payload stays
+# empty) while -v prints "(null)" for a zero-length payload.
 #
 # Holding the connection open is done with one-second sleeps rather than one
 # long sleep: a killed child inherits the fifo descriptor, and a lingering
@@ -39,7 +43,27 @@ gate=
 gawk_pid=
 topic=${FAKE_SUB_TOPIC:-home/kitchen/temp}
 payload=${FAKE_SUB_PAYLOAD:-}
+empty=${FAKE_SUB_EMPTY:-0}
 code=${FAKE_SUB_CODE:-1}
+
+format=0
+for arg in "$@"; do
+    [[ $arg == -F ]] && format=1
+done
+
+# One message line, shaped like the real client's: -F keeps an empty payload
+# empty, -v writes "(null)" for it.
+print_message() {
+    if (( empty )); then
+        if (( format )); then
+            printf '%s \n' "$topic"
+        else
+            printf '%s (null)\n' "$topic"
+        fi
+    else
+        printf '%s %s\n' "$topic" "${payload:-message $1}"
+    fi
+}
 
 # Any process at all keeps the fifo open for the reader; sleep is the quietest.
 idle() { exec sleep 3600; }
@@ -70,7 +94,7 @@ stream)
         # The payload has to be something a rule reacts to: a temperature rule
         # given "message 1" correctly does nothing, and a case that then counts
         # published commands looks like a buffering failure when it is not.
-        printf '%s %s\n' "$topic" "${payload:-message $i}"
+        print_message "$i"
         (( i < count )) && sleep "$gap"
     done
     hold
@@ -90,10 +114,19 @@ buffered)
     # SIGTERM leaves a foreground child behind, and a leftover reader keeps the
     # gate open for ever - which is also how the ticker leaked its sleep.
     trap 'kill "${gawk_pid:-}" 2>/dev/null; rm -f "$gate"; exit 0' TERM INT
-    gawk -v gate="$gate" -v n="$count" -v topic="$topic" -v payload="$payload" '
+    gawk -v gate="$gate" -v n="$count" -v topic="$topic" -v payload="$payload" \
+         -v empty="$empty" -v format="$format" '
         BEGIN {
-            for (i = 1; i <= n; i++)
-                printf "%s %s\n", topic, (payload == "" ? "message " i : payload)
+            for (i = 1; i <= n; i++) {
+                if (empty) {
+                    if (format)
+                        printf "%s \n", topic
+                    else
+                        printf "%s (null)\n", topic
+                } else {
+                    printf "%s %s\n", topic, (payload == "" ? "message " i : payload)
+                }
+            }
             while ((getline line < gate) > 0)
                 ;
         }' &

@@ -1,4 +1,4 @@
-# awk-e ![Version](https://img.shields.io/badge/version-v1.0.0-red)
+# awk-e ![Version](https://img.shields.io/badge/version-v1.0.1-red)
 
 > awk-e is to MQTT what AWK is to text files
 
@@ -28,7 +28,7 @@ on a fixed interval so rules run on a schedule, `--pipe` runs a command,
 ```mermaid
 flowchart TD
     subgraph Inputs["Inputs"]
-        MQTT["<b>--mqtt</b><br/><i>mosquitto_sub -v -t '#'</i>"]
+        MQTT["<b>--mqtt</b><br/><i>mosquitto_sub -F '%t %p' -t '#'</i>"]
         WEBHOOK["<b>--webhook</b><br/><i>HTTP clients</i>"]
         PIPE["<b>--pipe</b> CMD<br/><i>any command's stdout</i>"]
         TICK["<b>--tick</b> SECONDS<br/><i>the clock</i>"]
@@ -57,7 +57,7 @@ a rule directory, and nothing else.
 | --- | --- | --- |
 | `bash` >= 4.4 | the entry point | ships everywhere |
 | `gawk` >= 4.0 | indirect calls, two-way coprocesses | `sudo apt install gawk` |
-| `mosquitto_sub` | the MQTT subscription, only with `--mqtt` | `sudo apt install mosquitto-clients` |
+| `mosquitto_sub` >= 1.5 | the MQTT subscription, only with `--mqtt` (`-F`) | `sudo apt install mosquitto-clients` |
 | `mosquitto_pub` | the MQTT publisher, only for `pub()` | `sudo apt install mosquitto-clients` |
 | `stdbuf`, `timeout` | line buffering and the HTTP preflight (coreutils) | usually already installed |
 | `jq` | only for `json()` payload extraction | `sudo apt install jq` |
@@ -699,14 +699,16 @@ reproducible:
 ```shell
 ./awk-e -n -v -r examples -i examples/messages.log   # what would happen
 ./awk-e -v -r examples -i examples/messages.log      # what does happen
-mosquitto_sub -v -t '#' | tee recording.log            # record a real stream
+mosquitto_sub -F '%t %p' -t '#' | tee recording.log  # record a real stream
 ./awk-e -n -r ~/rules -i recording.log               # replay against rules
 ```
 
 A recording is one `topic payload` line per message - the format every input
-produces, and exactly what `mosquitto_sub -v` prints. Two caveats: a payload
-that itself contains newlines arrives as several lines, and a multi-line
-payload cannot be replayed faithfully without extra framing.
+produces, and exactly what `mosquitto_sub -F '%t %p'` prints. An empty payload
+is a bare topic line; `-v` is not used because it writes `topic (null)` for an
+empty message, so an old `-v` recording shows `(null)` there instead. Two
+caveats: a payload that itself contains newlines arrives as several lines, and a
+multi-line payload cannot be replayed faithfully without extra framing.
 
 ## Scheduled work
 

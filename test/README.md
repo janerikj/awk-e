@@ -50,8 +50,10 @@ that decision the suite pins `AWKE_MQTT=0`, `AWKE_TICK=0`,
 | `stream` | `FAKE_SUB_COUNT` messages, `FAKE_SUB_GAP` apart, then silence |
 | `buffered` | the same messages, but block-buffered - see below |
 
-Also `FAKE_SUB_TOPIC`, `FAKE_SUB_PAYLOAD`, `FAKE_SUB_COUNT`, `FAKE_SUB_GAP` and
-`FAKE_SUB_CODE`.
+Also `FAKE_SUB_TOPIC`, `FAKE_SUB_PAYLOAD`, `FAKE_SUB_EMPTY`, `FAKE_SUB_COUNT`,
+`FAKE_SUB_GAP` and `FAKE_SUB_CODE`. Like the real client, `-F` prints the payload
+as it is (empty stays empty) while `-v` prints `(null)` for a zero-length
+payload; `FAKE_SUB_EMPTY=1` asks for that zero-length payload.
 
 Two of these deserve an explanation, because both were wrong the first time:
 

@@ -10,7 +10,7 @@ That maps unusually well onto `pattern { action }`:
 
 | Node-RED | awk-e |
 | --- | --- |
-| MQTT in node | `mosquitto_sub -v` |
+| MQTT in node | `mosquitto_sub -F '%t %p'` |
 | switch node | topic regex in `reg()` |
 | change/function node | the handler function body |
 | function node calling out | `emit()`, `pub()` |
@@ -390,7 +390,7 @@ between stages*; what shaped the code is the rest.
 awk-e uses `stdbuf -oL` on **both** stages:
 
 ```shell
-stdbuf -oL mosquitto_sub -v -t '#' &
+stdbuf -oL mosquitto_sub -F '%t %p' -t '#' &
 stdbuf -oL gawk -f lib/router.awk -f rules/*.awk < "$fifo" &
 ```
 

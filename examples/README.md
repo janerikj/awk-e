@@ -24,7 +24,7 @@ starting point for your own.
 | `heartbeat.awk` | scheduled work from the built-in clock, publishing a heartbeat topic |
 | `modbus.sh` | a `--pipe` poll: one register read per row of `modbus.map`, printed as topics |
 | `modbus.map` | the register map (`slave type addr count fmt topic`) the recipe reads |
-| `messages.log` | a recorded `mosquitto_sub -v` stream used by `--input` |
+| `messages.log` | a recorded `mosquitto_sub -F '%t %p'` stream used by `--input` |
 
 Point a real broker at them and publish:
 
@@ -65,11 +65,11 @@ It needs `mbpoll` (not an awk-e dependency): `sudo apt install mbpoll`.
 
 ## `messages.log`
 
-Exactly what `mosquitto_sub -v` prints, one `topic payload` per line. Record
-your own with:
+Exactly what `mosquitto_sub -F '%t %p'` prints, one `topic payload` per line.
+An empty payload is a bare topic line. Record your own with:
 
 ```shell
-mosquitto_sub -v -t '#' | tee my.log
+mosquitto_sub -F '%t %p' -t '#' | tee my.log
 ./awk-e -n -i my.log
 ```
 
