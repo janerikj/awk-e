@@ -24,6 +24,7 @@ starting point for your own.
 | `heartbeat.awk` | scheduled work from the built-in clock, publishing a heartbeat topic |
 | `modbus.sh` | a `--pipe` poll: one register read per row of `modbus.map`, printed as topics |
 | `modbus.map` | the register map (`slave type addr count fmt topic`) the recipe reads |
+| `ntfy-pipe.sh` | a `--pipe` subscription to an ntfy topic, printed as `ntfy/<topic> payload` |
 | `messages.log` | a recorded `mosquitto_sub -F '%t %p'` stream used by `--input` |
 
 Point a real broker at them and publish:
@@ -62,6 +63,26 @@ awk-e --pipe './examples/modbus.sh 10.0.0.5' --every 5 --changed
 It needs `mbpoll` (not an awk-e dependency): `sudo apt install mbpoll`.
 `MODBUS_HOST`, `MODBUS_PORT` (default 502) and `MODBUS_MAP` set the defaults.
 `./examples/modbus.sh --help` (or `-?`) explains the map columns and options.
+
+## `ntfy-pipe.sh`
+
+A long-lived `--pipe` recipe for ntfy: it reads a topic's JSON stream and prints
+each message as `ntfy/<topic> payload`. Newlines in the message are escaped, so
+one ntfy message stays one line for awk-e.
+
+```shell
+awk-e --pipe './examples/ntfy-pipe.sh mytopic'
+```
+
+Do not add `--every`: ntfy pushes the stream, it is not polled. If the connection
+drops, the recipe exits and `Restart=always` in the service unit starts it again.
+
+It needs `curl` and `jq` (not awk-e dependencies): `sudo apt install curl jq`.
+`NTFY_URL` points at another server, `NTFY_PREFIX` changes the topic prefix, and
+`NTFY_USER`/`NTFY_PASS` or `NTFY_TOKEN` add authentication. `NTFY_SINCE` replays
+from a timestamp or message id before continuing. ntfy.sh topics are public by
+default, so use an unguessable name or a self-hosted/authenticated server.
+`./examples/ntfy-pipe.sh --help` (or `-?`) lists the variables and defaults.
 
 ## `messages.log`
 
