@@ -16,7 +16,7 @@ FREQ = "69mhz"
 
 def decode_call(b: bytes) -> str:
     name = "".join(chr(x >> 1) for x in b[:6]).strip()
-    ssid = (b >> 1) & 0x0F
+    ssid = (b[6] >> 1) & 0x0F
     return f"{name}-{ssid}" if ssid else name
 
 def parse_kiss(frame: bytearray) -> str | None:
@@ -32,7 +32,7 @@ def parse_kiss(frame: bytearray) -> str | None:
             i += 1
 
     # Require atleast 1 byte port + 14 bytes addresses + 2 bytes control/pid
-    if len(raw) < 17 or (raw & 0x0F) != 0:
+    if len(raw) < 17 or (raw[0] & 0x0F) != 0:
         return None
 
     ax = raw[1:]

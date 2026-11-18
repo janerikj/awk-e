@@ -16,3 +16,5 @@
 
 # benchmark scratch (payloads, recordings, per-run timings)
 /bench/tmp/
+
+examples/__pycache__/

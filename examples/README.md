@@ -25,6 +25,7 @@ starting point for your own.
 | `modbus.sh` | a `--pipe` poll: one register read per row of `modbus.map`, printed as topics |
 | `modbus.map` | the register map (`slave type addr count fmt topic`) the recipe reads |
 | `ntfy-pipe.sh` | a `--pipe` subscription to an ntfy topic, printed as `ntfy/<topic> payload` |
+| `radio_in.py` | a `--pipe` feed from Direwolf (KISS/AX.25 over TCP), printed as `radio/in/<freq>/<src>/<dest> <message>` |
 | `messages.log` | a recorded `mosquitto_sub -F '%t %p'` stream used by `--input` |
 
 Point a real broker at them and publish:
@@ -83,6 +84,20 @@ It needs `curl` and `jq` (not awk-e dependencies): `sudo apt install curl jq`.
 from a timestamp or message id before continuing. ntfy.sh topics are public by
 default, so use an unguessable name or a self-hosted/authenticated server.
 `./examples/ntfy-pipe.sh --help` (or `-?`) lists the variables and defaults.
+
+## `radio_in.py`
+
+A `--pipe` feed from Direwolf: it connects to Direwolf's KISS TCP port, decodes
+incoming AX.25 UI frames and prints each message as
+`radio/in/<freq>/<src>/<dest> <message>`.
+
+```shell
+awk-e --pipe './examples/radio_in.py 127.0.0.1 8001'
+```
+
+It needs Direwolf running with a KISS TCP port (default 8001) and Python 3 (not
+awk-e dependencies). Host/port can be passed as arguments; on disconnect it
+retries until Direwolf is available.
 
 ## `messages.log`
 
